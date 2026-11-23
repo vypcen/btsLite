@@ -60,6 +60,11 @@ Set-Acl -LiteralPath $Data -AclObject $acl
 foreach ($directory in @('postgres', 'uploads', 'backups', 'logs')) {
     New-Item -ItemType Directory -Path (Join-Path $Data $directory) -Force | Out-Null
 }
+$setupLog = Join-Path $Data 'logs/install-error.log'
+trap {
+    ($_.Exception.Message) | Add-Content -LiteralPath $setupLog
+    throw
+}
 if (-not (Test-Path -LiteralPath $Config)) {
     $password = New-HexSecret
     @(

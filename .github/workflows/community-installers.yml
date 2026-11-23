@@ -45,7 +45,8 @@ jobs:
           sudo test -s /var/lib/blackcat-community/postgres/PG_VERSION
       - name: Installation diagnostics
         if: failure()
-        run: sudo journalctl -u blackcat-community -u blackcat-community-db --no-pager -n 120 | sed -E 's/(администратора: ).*/\1[redacted]/'
+        run: |
+          sudo journalctl -u blackcat-community -u blackcat-community-db --no-pager -n 120 | sed -E 's/(администратора: ).*/\1[redacted]/'
       - uses: actions/upload-artifact@v4
         with:
           name: Community-Ubuntu-24.04-x64
