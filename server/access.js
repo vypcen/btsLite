@@ -15,7 +15,7 @@ const isProjectRole = (r) => r !== "admin" && isRole(r);
 
 const roleOf = (userOrRole) => (typeof userOrRole === "string" ? userOrRole : userOrRole?.role);
 const isAdmin = (user) => roleOf(user) === "admin";
-// «пишет»: занимает полное место — может что-то менять сверх комментариев и статусов
+// Права записи включают изменения сверх комментариев и статусов багов.
 const canWrite = (userOrRole) => roles.seatOf(roleOf(userOrRole)) === "full";
 const canComment = (userOrRole) => roles.can(roleOf(userOrRole), "comments");
 const can = (userOrRole, perm) => roles.can(roleOf(userOrRole), perm);

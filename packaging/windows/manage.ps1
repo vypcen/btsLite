@@ -10,6 +10,11 @@ $PgData = Join-Path $Data 'postgres'
 $PgBin = Join-Path $InstallDir 'pgsql\bin'
 $Config = Join-Path $Data 'app.env'
 $PgPort = 55432
+trap {
+    Write-Host $_.InvocationInfo.PositionMessage
+    Write-Host $_.Exception.Message
+    exit 1
+}
 
 function Invoke-Native([string]$Executable, [string[]]$Arguments) {
     & $Executable @Arguments
@@ -45,6 +50,7 @@ if ($Action -ne 'Install') {
     exit 0
 }
 
+Write-Host 'Preparing Community data directory and permissions'
 New-Item -ItemType Directory -Path $Data -Force | Out-Null
 if ((Get-Item -LiteralPath $Data -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
     throw "The data directory must not be a reparse point: $Data"
@@ -63,11 +69,7 @@ Set-Acl -LiteralPath $Data -AclObject $acl
 foreach ($directory in @('postgres', 'uploads', 'backups', 'logs')) {
     New-Item -ItemType Directory -Path (Join-Path $Data $directory) -Force | Out-Null
 }
-$setupLog = Join-Path $Data 'logs/install-error.log'
-trap {
-    ($_.Exception.Message) | Add-Content -LiteralPath $setupLog
-    throw
-}
+Write-Host 'Preparing Community configuration'
 if (-not (Test-Path -LiteralPath $Config)) {
     $password = New-HexSecret
     @(
@@ -85,6 +87,7 @@ if (-not (Test-Path -LiteralPath $Config)) {
     ) | Set-Content -LiteralPath "$Config.new" -Encoding ASCII
     Move-Item -LiteralPath "$Config.new" -Destination $Config
 }
+Write-Host 'Preparing the PostgreSQL cluster'
 if (-not (Test-Path -LiteralPath (Join-Path $PgData 'PG_VERSION'))) {
     $url = (Get-Content -LiteralPath $Config | Where-Object { $_.StartsWith('DATABASE_URL=') }).Substring(13)
     $password = ([Uri]$url).UserInfo.Split(':', 2)[1]
