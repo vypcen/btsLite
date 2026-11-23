@@ -93,12 +93,25 @@ if (-not (Test-Path -LiteralPath (Join-Path $PgData 'PG_VERSION'))) {
     $url = (Get-Content -LiteralPath $Config | Where-Object { $_.StartsWith('DATABASE_URL=') }).Substring(13)
     $password = ([Uri]$url).UserInfo.Split(':', 2)[1]
     $passwordFile = Join-Path $Data 'postgres-init-password'
+    # PostgreSQL deliberately removes administrative group privileges in initdb.exe.
+    # Temporarily allow the installing identity to initialize the cluster with its restricted token.
+    $installer = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+    $temporaryRule = $null
+    if ($installer.Value -notin @('S-1-5-18', 'S-1-5-19')) {
+        $temporaryRule = [System.Security.AccessControl.FileSystemAccessRule]::new($installer, 'Modify', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+        $acl.AddAccessRule($temporaryRule)
+        $dataDirectory.SetAccessControl($acl)
+    }
     try {
         Set-Content -LiteralPath $passwordFile -Value $password -Encoding ASCII
         Invoke-Native (Join-Path $PgBin 'initdb.exe') @('-D', $PgData, '--username=postgres', '--encoding=UTF8', '--locale=C', '--auth=scram-sha-256', "--pwfile=$passwordFile")
         Add-Content -LiteralPath (Join-Path $PgData 'postgresql.conf') -Value "listen_addresses = '127.0.0.1'`nport = $PgPort" -Encoding ASCII
     } finally {
         Remove-Item -LiteralPath $passwordFile -ErrorAction SilentlyContinue
+        if ($temporaryRule) {
+            $acl.RemoveAccessRuleSpecific($temporaryRule)
+            $dataDirectory.SetAccessControl($acl)
+        }
     }
 }
 if (-not (Get-Service -Name $DbService -ErrorAction SilentlyContinue)) {
