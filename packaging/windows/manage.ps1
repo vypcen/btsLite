@@ -52,10 +52,11 @@ if ($Action -ne 'Install') {
 
 Write-Host 'Preparing Community data directory and permissions'
 New-Item -ItemType Directory -Path $Data -Force | Out-Null
-if ((Get-Item -LiteralPath $Data -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+$dataDirectory = [System.IO.DirectoryInfo]::new($Data)
+if ($dataDirectory.Attributes -band [IO.FileAttributes]::ReparsePoint) {
     throw "The data directory must not be a reparse point: $Data"
 }
-$acl = Get-Acl -LiteralPath $Data
+$acl = $dataDirectory.GetAccessControl()
 $acl.SetAccessRuleProtection($true, $false)
 foreach ($rule in $acl.GetAccessRules($true, $false, [System.Security.Principal.SecurityIdentifier])) {
     $acl.RemoveAccessRuleSpecific($rule)
@@ -65,7 +66,7 @@ foreach ($sid in @('S-1-5-18', 'S-1-5-32-544', 'S-1-5-19')) {
     $rule = [System.Security.AccessControl.FileSystemAccessRule]::new($identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
     $acl.AddAccessRule($rule)
 }
-Set-Acl -LiteralPath $Data -AclObject $acl
+$dataDirectory.SetAccessControl($acl)
 foreach ($directory in @('postgres', 'uploads', 'backups', 'logs')) {
     New-Item -ItemType Directory -Path (Join-Path $Data $directory) -Force | Out-Null
 }
