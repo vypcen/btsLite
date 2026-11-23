@@ -35,6 +35,9 @@ Filename: "http://localhost:3002/"; Description: "Open BlackCat Testing Communit
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\manage.ps1"" -Action Remove -InstallDir ""{app}"""; Flags: runhidden waituntilterminated
 
 [Code]
+var
+  SetupFailed: Boolean;
+
 function Manage(Action, ScriptPath: String): Boolean;
 var
   ResultCode: Integer;
@@ -43,7 +46,7 @@ begin
   Params := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ScriptPath + '" -Action ' + Action +
     ' -InstallDir "' + ExpandConstant('{app}') + '"';
   ResultCode := 0;
-  Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := ExecAndLogOutput(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Params, '', SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode, nil);
   Result := Result and (ResultCode = 0);
   if not Result then Log('Community ' + Action + ' failed with exit code ' + IntToStr(ResultCode));
 end;
@@ -59,5 +62,13 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if (CurStep = ssPostInstall) and not Manage('Install', ExpandConstant('{app}\manage.ps1')) then
-    RaiseException('Community could not start. See ProgramData\BlackCatTestingCommunity\logs.');
+  begin
+    SetupFailed := True;
+    SuppressibleMsgBox('Community could not start. See the Setup log or ProgramData\BlackCatTestingCommunity\logs.', mbError, MB_OK, IDOK);
+  end;
+end;
+
+function GetCustomSetupExitCode: Integer;
+begin
+  if SetupFailed then Result := 10 else Result := 0;
 end;

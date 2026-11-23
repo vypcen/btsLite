@@ -49,11 +49,14 @@ New-Item -ItemType Directory -Path $Data -Force | Out-Null
 if ((Get-Item -LiteralPath $Data -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
     throw "The data directory must not be a reparse point: $Data"
 }
-$acl = New-Object System.Security.AccessControl.DirectorySecurity
+$acl = Get-Acl -LiteralPath $Data
 $acl.SetAccessRuleProtection($true, $false)
+foreach ($rule in $acl.GetAccessRules($true, $false, [System.Security.Principal.SecurityIdentifier])) {
+    $acl.RemoveAccessRuleSpecific($rule)
+}
 foreach ($sid in @('S-1-5-18', 'S-1-5-32-544', 'S-1-5-19')) {
-    $identity = New-Object System.Security.Principal.SecurityIdentifier $sid
-    $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+    $identity = [System.Security.Principal.SecurityIdentifier]::new($sid)
+    $rule = [System.Security.AccessControl.FileSystemAccessRule]::new($identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
     $acl.AddAccessRule($rule)
 }
 Set-Acl -LiteralPath $Data -AclObject $acl
