@@ -26,11 +26,6 @@ interface AdminUser {
   sessions?: number;
 }
 
-interface Seats {
-  full: { used: number; limit: number | null };
-  view: { used: number; limit: number | null };
-}
-
 const usersUrl = "/api/admin/users";
 const userUrl = (login: string) => `${usersUrl}/${encodeURIComponent(login)}`;
 
@@ -61,7 +56,7 @@ export function Users() {
 function UsersList() {
   const { me, write, liveError } = useStore();
   const roleList = useRoles();
-  const { value, error } = useLoad<{ users: AdminUser[]; seats: Seats }>(usersUrl);
+  const { value, error } = useLoad<{ users: AdminUser[]; seats: { used: number; limit: number } }>(usersUrl);
   const [q, setQ] = useState("");
   const [access, setAccess] = useState<AdminUser | null>(null);
   const [del, setDel] = useState<AdminUser | null>(null);
@@ -102,8 +97,7 @@ function UsersList() {
       </div>
       {value?.seats && (
         <div className="small muted" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <span title="Тестировщики и администраторы">Полные лицензии: <b>{value.seats.full.used}</b>{value.seats.full.limit !== null ? ` из ${value.seats.full.limit}` : " (без ограничений)"}</span>
-          <span title="Разработчики и наблюдатели">Просмотровые лицензии: <b>{value.seats.view.used}</b>{value.seats.view.limit !== null ? ` из ${value.seats.view.limit}` : " (без ограничений)"}</span>
+          <span>Занято мест: <b>{value.seats.used}</b> из {value.seats.limit}</span>
         </div>
       )}
       <div className="toolbar">

@@ -1,0 +1,101 @@
+name: Community installers
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, codex/community-installers]
+    paths:
+      - '.github/workflows/community-installers.yml'
+      - 'packaging/**'
+      - 'server/**'
+      - 'scripts/**'
+      - 'web/**'
+      - 'package*.json'
+      - 'docs/**'
+      - 'README.md'
+      - 'LICENSE-EULA.md'
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.3'
+          cache: npm
+      - run: bash packaging/build-payload.sh
+      - run: bash packaging/linux/build.sh
+      - name: Install, reinstall and remove
+        run: |
+          set -euo pipefail
+          bundle=$(realpath packages/*.deb)
+          config=/etc/blackcat-community/app.env
+          sudo apt-get update -q
+          sudo apt-get install -y "$bundle"
+          sudo systemctl is-active blackcat-community blackcat-community-db
+          sudo "$(command -v node)" packaging/smoke.js install "$config"
+          sudo dpkg -i "$bundle"
+          sudo "$(command -v node)" packaging/smoke.js upgrade "$config"
+          sudo dpkg -r blackcat-testing-community
+          ! systemctl is-active --quiet blackcat-community
+          sudo test -s /var/lib/blackcat-community/postgres/PG_VERSION
+      - name: Installation diagnostics
+        if: failure()
+        run: sudo journalctl -u blackcat-community -u blackcat-community-db --no-pager -n 120 | sed -E 's/(администратора: ).*/\1[redacted]/'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Community-Ubuntu-24.04-x64
+          path: packages/*.deb
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.3'
+          cache: npm
+      - run: bash packaging/build-payload.sh
+      - run: ./packaging/windows/build.ps1
+      - name: Install, reinstall and remove
+        run: |
+          $installer = (Get-ChildItem packages/*-Setup.exe).FullName
+          $config = Join-Path $env:ProgramData 'BlackCatTestingCommunity/app.env'
+          function Invoke-Setup {
+            $process = Start-Process $installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/LOG=community-install.log' -Wait -PassThru
+            if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
+            if ((Get-Service BlackCatTestingCommunity).Status -ne 'Running') { throw 'App service not running' }
+          }
+          Invoke-Setup
+          node packaging/smoke.js install $config
+          if ($LASTEXITCODE -ne 0) { throw 'Fresh installation failed smoke test' }
+          Invoke-Setup
+          node packaging/smoke.js upgrade $config
+          if ($LASTEXITCODE -ne 0) { throw 'Reinstall failed smoke test' }
+          $uninstaller = Join-Path $env:ProgramFiles 'BlackCat Testing Community/unins000.exe'
+          $process = Start-Process $uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw 'Uninstall failed' }
+          if (Get-Service BlackCatTestingCommunity -ErrorAction SilentlyContinue) { throw 'App service remains installed' }
+          if (-not (Test-Path "$env:ProgramData/BlackCatTestingCommunity/postgres/PG_VERSION")) { throw 'Uninstall removed the database' }
+      - name: Installation diagnostics
+        if: failure()
+        run: |
+          if (Test-Path community-install.log) { Get-Content community-install.log -Tail 50 }
+          $logs = Join-Path $env:ProgramData 'BlackCatTestingCommunity/logs'
+          if (Test-Path $logs) {
+            Get-ChildItem $logs -File | ForEach-Object { Get-Content $_.FullName -Tail 35 } |
+              ForEach-Object { $_ -replace '(администратора: ).*', '$1[redacted]' }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Community-Windows-x64
+          path: packages/*-Setup.exe
+          if-no-files-found: error

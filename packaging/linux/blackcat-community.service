@@ -1,0 +1,20 @@
+[Unit]
+Description=BlackCat Testing Community
+Requires=blackcat-community-db.service
+After=blackcat-community-db.service
+
+[Service]
+User=blackcat-community
+Group=blackcat-community
+WorkingDirectory=/opt/blackcat-community
+EnvironmentFile=/etc/blackcat-community/app.env
+ExecStart=/opt/blackcat-community/node server/index.js
+Restart=on-failure
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/blackcat-community
+
+[Install]
+WantedBy=multi-user.target

@@ -144,14 +144,13 @@ interface System {
 }
 
 function LicenseCard() {
-  const { value, error } = useLoad<{ seats: { full: { used: number; limit: number }; view: { used: number } } }>("/api/admin/license");
+  const { value, error } = useLoad<{ seats: { used: number; limit: number } }>("/api/admin/license");
   return (
     <section className="card">
       <h3 style={{ marginTop: 0 }}>BlackCat Testing Community</h3>
       {error ? <div className="banner">{error}</div> : !value ? <div className="skel">Загружаем сведения о местах…</div> : (
         <dl>
-          <dt>Полные места</dt><dd>{value.seats.full.used} из {value.seats.full.limit}</dd>
-          <dt>Просмотровые места</dt><dd>{value.seats.view.used} · без ограничений</dd>
+          <dt>Занято мест</dt><dd>{value.seats.used} из {value.seats.limit}</dd>
         </dl>
       )}
     </section>

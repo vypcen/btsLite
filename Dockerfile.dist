@@ -1,5 +1,5 @@
 # Образ для клиентов (пилот и поставка): без исходного кода, тестов и инструментов разработчика.
-#   docker build -f Dockerfile.dist -t blackcat-testing-community:1.1.0 .
+#   docker build -f Dockerfile.dist -t blackcat-testing-community:2.0.0 .
 # Для развёртывания используйте docker-compose.yml и README.md.
 
 # 1. Интерфейс

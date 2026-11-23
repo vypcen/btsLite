@@ -47,8 +47,6 @@ router.post("/users", wrap(async (req, res) => {
   const role = req.body.role === undefined ? "tester" : req.body.role;
   const bad = auth.checkLogin(login) || (!name && "Укажите имя") || auth.checkPassword(req.body.password, { login, name }) || (!access.isRole(role) && "Неизвестная роль");
   if (bad) return res.status(400).json({ error: bad });
-  const noSeat = await seats.check(pool, role);
-  if (noSeat) return res.status(409).json({ error: noSeat });
   // пароль, выданный админом, пользователь меняет при первом входе (PASSWORD_CHANGE_ON_RESET)
   const { rows } = await pool.query(
     "INSERT INTO users(login, name, password_hash, role, must_change_password) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (login) DO NOTHING RETURNING id",
@@ -67,12 +65,6 @@ router.patch("/users/:login", wrap(async (req, res) => {
   const { role, blocked, password } = req.body;
   if (password !== undefined && u.auth_provider !== "local") {
     return res.status(409).json({ error: "Пароль этого пользователя хранится в каталоге (LDAP/SSO) и меняется там" });
-  }
-  // новая роль или разблокировка занимают лицензию
-  const willBeActive = !(blocked ?? u.blocked);
-  if (willBeActive && ((role !== undefined && role !== u.role) || u.blocked)) {
-    const noSeat = await seats.check(pool, role ?? u.role, u.id);
-    if (noSeat) return res.status(409).json({ error: noSeat });
   }
   if (role !== undefined && !access.isRole(role)) return res.status(400).json({ error: "Неизвестная роль" });
   if (blocked !== undefined && typeof blocked !== "boolean") return res.status(400).json({ error: "blocked должно быть true или false" });
@@ -123,12 +115,6 @@ router.put("/users/:login/projects", wrap(async (req, res) => {
     .map((p) => ({ key: str(p.key, 10).toUpperCase(), role: access.isProjectRole(p.role) ? p.role : null }))
     .filter((p) => p.key);
   const keys = items.map((p) => p.key);
-  // полная роль в проекте занимает полное место в лицензии
-  const fullRole = items.find((p) => p.role && roles.seatOf(p.role) === "full");
-  if (fullRole && !u.blocked) {
-    const noSeat = await seats.check(pool, fullRole.role, u.id);
-    if (noSeat) return res.status(409).json({ error: noSeat });
-  }
   await tx(async (db) => {
     await db.query("DELETE FROM project_members WHERE user_id=$1 AND NOT (project_key = ANY($2::text[]))", [u.id, keys]);
     // несуществующие ключи молча пропускаются

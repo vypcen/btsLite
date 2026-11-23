@@ -6,16 +6,11 @@ const { startServer, seed, client } = require("./helpers");
 let srv, u, rev;
 test.before(async () => {
   srv = await startServer();
-  u = await seed(srv);
-  for (const login of ["anna", "boris"]) {
-    assert.equal((await u.admin.post("/api/admin/users", { login, name: login, password: "Tb-pass-2026", role: "tester" })).status, 201);
-    await u.admin.put(`/api/admin/users/${login}/projects`, { projects: ["LK"] });
-  }
-  rev = {};
-  for (const login of ["anna", "boris"]) {
-    rev[login] = client(srv.base);
-    assert.equal((await rev[login].post("/api/auth/login", { login, password: "Tb-pass-2026" })).status, 200);
-  }
+  u = await seed(srv, { outsider: false });
+  assert.equal((await u.admin.post("/api/admin/users", { login: "anna", name: "Анна", password: "Tb-pass-2026", role: "tester" })).status, 201);
+  assert.equal((await u.admin.put("/api/admin/users/anna/projects", { projects: ["LK"] })).status, 200);
+  rev = { anna: client(srv.base), admin: u.admin };
+  assert.equal((await rev.anna.post("/api/auth/login", { login: "anna", password: "Tb-pass-2026" })).status, 200);
 });
 test.after(async () => srv && srv.stop());
 
@@ -34,11 +29,11 @@ test("ревью: два рецензента, утверждают оба — �
   assert.equal((await u.tester.post(`/api/projects/LK/cases/${n}/review`, { reviewers: ["dev"] })).status, 400, "у разработчика нет права ревью");
   assert.equal((await u.tester.post(`/api/projects/LK/cases/${n}/review`, { reviewers: ["outsider"] })).status, 400, "не участник");
   assert.equal((await u.viewer.post(`/api/projects/LK/cases/${n}/review`, {})).status, 403);
-  let r = await u.tester.post(`/api/projects/LK/cases/${n}/review`, { reviewers: ["anna", "boris"], comment: "Проверьте шаги" });
+  let r = await u.tester.post(`/api/projects/LK/cases/${n}/review`, { reviewers: ["admin", "anna"], comment: "Проверьте шаги" });
   assert.equal(r.status, 201, JSON.stringify(r.data));
   let c = await caseOf(n);
   assert.equal(c.status, "review");
-  assert.deepEqual(c.review.map((x) => x.reviewer).sort(), ["anna", "boris"]);
+  assert.deepEqual(c.review.map((x) => x.reviewer).sort(), ["admin", "anna"]);
 
   // список «мне на ревью»
   assert.deepEqual((await rev.anna.get("/api/projects/LK/reviews")).data.items.map((i) => i.num), [n]);
@@ -51,7 +46,7 @@ test("ревью: два рецензента, утверждают оба — �
   assert.equal(r.data.status, "review");
   assert.equal(r.data.left, 1);
   assert.equal((await rev.anna.post(`/api/projects/LK/cases/${n}/review/decision`, { decision: "approve" })).status, 403, "повторно — уже решено");
-  r = await rev.boris.post(`/api/projects/LK/cases/${n}/review/decision`, { decision: "approve" });
+  r = await rev.admin.post(`/api/projects/LK/cases/${n}/review/decision`, { decision: "approve" });
   assert.equal(r.data.status, "ready");
   assert.equal((await caseOf(n)).status, "ready");
 
@@ -63,9 +58,9 @@ test("ревью: два рецензента, утверждают оба — �
 test("ревью: возврат на доработку с комментарием, заявка «любому», смена статуса отменяет заявки", async () => {
   const n = await newCase("Восстановление пароля");
   assert.equal((await u.tester.post(`/api/projects/LK/cases/${n}/review`, {})).status, 201);
-  assert.deepEqual((await rev.boris.get("/api/projects/LK/reviews")).data.items.map((i) => i.num), [n]);
-  assert.equal((await rev.boris.post(`/api/projects/LK/cases/${n}/review/decision`, { decision: "changes" })).status, 400, "без комментария нельзя");
-  let r = await rev.boris.post(`/api/projects/LK/cases/${n}/review/decision`, { decision: "changes", comment: "Нет шага про почту" });
+  assert.deepEqual((await rev.admin.get("/api/projects/LK/reviews")).data.items.map((i) => i.num), [n]);
+  assert.equal((await rev.admin.post(`/api/projects/LK/cases/${n}/review/decision`, { decision: "changes" })).status, 400, "без комментария нельзя");
+  let r = await rev.admin.post(`/api/projects/LK/cases/${n}/review/decision`, { decision: "changes", comment: "Нет шага про почту" });
   assert.equal(r.data.status, "draft");
   assert.equal((await caseOf(n)).status, "draft");
   assert.equal((await u.tester.get(`/api/projects/LK/cases/${n}/reviews`)).data.reviews[0].comment, "Нет шага про почту");

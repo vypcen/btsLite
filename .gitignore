@@ -24,3 +24,8 @@ cli/dist/
 # клиентская сборка (scripts/build-dist.js) и комплекты для клиентов (scripts/pack-trial.sh)
 dist/
 trial-packages/
+
+# Нативные установщики и сборочные файлы
+packages/
+windows-payload/
+community-install.log

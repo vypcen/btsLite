@@ -2,7 +2,7 @@
 // Встроенные роли — готовые наборы разрешений: администратор и тестировщик — всё, разработчик — комментарии,
 // статусы багов, наблюдатель — только просмотр.
 //
-// Лицензия: роль занимает просмотровое место, если в ней только разрешения из VIEW_PERMS, иначе — полное.
+// seatOf различает роли с правом записи и просмотровые роли. Сами места считаются по активным пользователям.
 // Просмотр проекта доступен любой роли участника; всё, что меняет данные, проверяется по разрешениям (ruleFor).
 const { pool } = require("./db");
 
@@ -53,8 +53,6 @@ const exists = (role) => Boolean(def(role));
 const permsOf = (role) => new Set(def(role)?.permissions || []);
 const can = (role, perm) => role === "admin" || permsOf(role).has(perm);
 const seatOf = (role) => (role === "admin" || [...permsOf(role)].some((p) => !VIEW_PERMS.includes(p)) ? "full" : "view");
-// роли, занимающие полное место (для подсчёта лицензий)
-const fullRoles = () => [...Object.keys(BUILTIN), ...custom.keys()].filter((r) => seatOf(r) === "full");
 const nameOf = (role) => def(role)?.name || role;
 
 // Какое разрешение нужно для изменяющего запроса к проекту. path — без /api/projects/:key
@@ -115,4 +113,4 @@ function allowed(role, perm) {
 const deniedText = (perm) =>
   `Ваша роль в этом проекте не позволяет: ${perm === "*" ? "это действие" : (Array.isArray(perm) ? perm : [perm]).map((p) => LABEL[p].toLowerCase()).join(" или ")}`;
 
-module.exports = { PERMS, ALL, VIEW_PERMS, BUILTIN, LABEL, load, def, exists, permsOf, can, seatOf, fullRoles, nameOf, ruleFor, allowed, deniedText };
+module.exports = { PERMS, ALL, VIEW_PERMS, BUILTIN, LABEL, load, def, exists, permsOf, can, seatOf, nameOf, ruleFor, allowed, deniedText };

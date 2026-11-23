@@ -217,7 +217,7 @@ export function useRoles(): { all: RoleOption[]; project: RoleOption[]; name: (k
   const builtin: RoleOption[] = ROLE_DEFS.map((r) => ({ key: r.key, label: r.label, hint: r.hint, seat: r.key === "tester" || r.key === "admin" ? "full" : "view", builtin: true }));
   const custom: RoleOption[] = Object.entries(data?.roles || {})
     .filter(([k]) => !builtin.some((b) => b.key === k))
-    .map(([k, r]) => ({ key: k, label: r.name, hint: r.seat === "full" ? "Своя роль · полная лицензия" : "Своя роль · просмотровая лицензия", seat: r.seat, builtin: false }));
+    .map(([k, r]) => ({ key: k, label: r.name, hint: "Своя роль", seat: r.seat, builtin: false }));
   const all = [...builtin, ...custom];
   return { all, project: all.filter((r) => r.key !== "admin"), name: (key) => all.find((r) => r.key === key)?.label || key };
 }

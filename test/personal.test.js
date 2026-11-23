@@ -16,7 +16,7 @@ const sql = async (q, p) => {
 };
 test.before(async () => {
   srv = await startServer({ PRIVACY_POLICY_URL: "https://company.ru/privacy", JOB_POLL_MS: "100", AUDIT_IP_DAYS: "30" });
-  u = await seed(srv);
+  u = await seed(srv, { outsider: false });
 });
 test.after(async () => srv && srv.stop());
 

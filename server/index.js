@@ -36,6 +36,7 @@ const review = require("./review");
 const datasets = require("./datasets");
 
 const PORT = Number(process.env.PORT || 3000);
+const HOST = process.env.LISTEN_HOST || "0.0.0.0";
 const KEY_RE = /^[A-Z]{2,6}$/;
 // closed — зарегистрироваться самому нельзя, учётные записи создаёт админ («Пользователи» → «Новый пользователь»)
 const REGISTRATION = process.env.REGISTRATION === "open" ? "open" : "closed";
@@ -191,7 +192,7 @@ app.post("/api/auth/register", wrap(async (req, res) => {
   const setup = await auth.needsSetup();
   if (setup) await auth.prepareSetup(); // база могла опустеть после запуска сервера
   if (setup && !auth.checkSetupCode(req.body.setupCode)) {
-    return res.status(403).json({ error: "Неверный код установки. Он напечатан в логах сервера: docker compose logs app" });
+    return res.status(403).json({ error: "Неверный код установки. Он напечатан в логах сервера" });
   }
   if (!setup && REGISTRATION === "closed") return res.status(403).json({ error: "Регистрация закрыта. Попросите администратора создать вам учётную запись" });
   // логин из ADMIN_LOGIN станет админом при перезапуске — занять его регистрацией нельзя
@@ -357,7 +358,7 @@ app.use("/api", eula.router);
 
 // Лицензия (админ): условия действующего ключа, ввод нового ключа, возврат к бесплатной редакции
 app.get("/api/admin/license", auth.requireUser, access.requireAdmin, wrap(async (_req, res) => {
-  res.json({ edition: "lite", full: seats.FULL_LIMIT, view: null, seats: await seats.usage(pool) });
+  res.json({ edition: "lite", seats: await seats.usage(pool) });
 }));
 
 // Фоновые задачи (админ): сводка по очереди, упавшие задачи, повтор
@@ -416,7 +417,7 @@ app.use(express.static(path.join(__dirname, "..", "public"), { index: "index.htm
 app.use((err, req, res, _next) => {
   if (err.type === "entity.parse.failed") return res.status(400).json({ error: "Некорректный JSON" });
   // ошибки с понятным пользователю кодом (модель недоступна, сервер перегружен, тело слишком большое) — не ошибки сервера
-  if (err.code === "23514" && err.constraint === "community_full_seats") return res.status(409).json({ error: seats.FULL_ERROR });
+  if (err.code === "23514" && err.constraint === "community_active_seats") return res.status(409).json({ error: seats.LIMIT_ERROR });
   if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
   if (err.expose && err.status) return res.status(err.status).json({ error: err.status === 413 ? "Слишком большой запрос" : "Некорректный запрос" });
   log.error("server", err.message, { reqId: req.id, method: req.method, path: req.originalUrl.split("?")[0], user: req.user?.login || null, err: err.code || err.name, stack: err.stack });
@@ -444,7 +445,7 @@ app.use((err, req, res, _next) => {
   require("./backup").startSchedule();
   trackers.startSync();
   jobs.start();
-  const server = app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, HOST, () => {
     ready = true;
     console.log(`[server] BlackCat Testing Community ${version.VERSION}${version.COMMIT ? ` (${version.COMMIT.slice(0, 8)})` : ""} запущен: http://localhost:${PORT}`);
   });

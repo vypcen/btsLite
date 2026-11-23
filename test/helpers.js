@@ -138,12 +138,14 @@ function client(base, { token } = {}) {
 
 // Типовой набор: админ, тестировщик, разработчик и проект LK
 // onAdmin(admin) — вызывается сразу после регистрации администратора, до остальных пользователей и проекта
-async function seed(srv, { onAdmin } = {}) {
+async function seed(srv, { onAdmin, outsider = true } = {}) {
   const admin = client(srv.base);
   let r = await admin.post("/api/auth/register", { login: "admin", name: "Админ", password: "Tb-pass-2026", setupCode: SETUP_CODE, consent: true });
   if (r.status !== 201) throw new Error(`register admin: ${r.status} ${JSON.stringify(r.data)}`);
   if (onAdmin) await onAdmin(admin);
-  for (const [login, role] of [["tester", "tester"], ["dev", "developer"], ["viewer", "viewer"], ["outsider", "tester"]]) {
+  const accounts = [["tester", "tester"], ["dev", "developer"], ["viewer", "viewer"]];
+  if (outsider) accounts.push(["outsider", "tester"]);
+  for (const [login, role] of accounts) {
     r = await admin.post("/api/admin/users", { login, name: login, password: "Tb-pass-2026", role });
     if (r.status !== 201) throw new Error(`create ${login}: ${r.status} ${JSON.stringify(r.data)}`);
   }
@@ -156,7 +158,7 @@ async function seed(srv, { onAdmin } = {}) {
     if (res.status !== 200) throw new Error(`login ${name}: ${res.status}`);
     return c;
   };
-  return { admin, tester: await login("tester"), dev: await login("dev"), viewer: await login("viewer"), outsider: await login("outsider") };
+  return { admin, tester: await login("tester"), dev: await login("dev"), viewer: await login("viewer"), outsider: outsider ? await login("outsider") : undefined };
 }
 
 module.exports = { startServer, client, seed, SETUP_CODE, ADMIN_URL, dbUrl, createDb, dropDb };

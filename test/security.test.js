@@ -26,7 +26,7 @@ const login = async (name, password = PASS, extra = {}) => {
 
 test.before(async () => {
   srv = await startServer({ PASSWORD_CHANGE_ON_RESET: "true", PASSWORD_HISTORY: "2", MAX_SESSIONS: "2", SESSION_IDLE_MINUTES: "30" });
-  u = await seed(srv);
+  u = await seed(srv, { outsider: false });
   // типовые пользователи уже «сменили» пароль — принудительная смена проверяется на отдельном пользователе
   await sql("UPDATE users SET must_change_password=false");
 });

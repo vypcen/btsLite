@@ -1,0 +1,39 @@
+#!/bin/sh
+set -eu
+
+if [ "$1" = configure ]; then
+  account=blackcat-community
+  data=/var/lib/blackcat-community
+  config=/etc/blackcat-community
+  pg=/usr/lib/postgresql/16/bin
+  node=/opt/blackcat-community/node
+  if ! id "$account" >/dev/null 2>&1; then
+    adduser --system --group --no-create-home --home "$data" "$account"
+  fi
+  install -d -m 0750 -o "$account" -g "$account" "$data" "$data/uploads" "$data/backups"
+  install -d -m 0700 -o "$account" -g "$account" "$data/postgres"
+  install -d -m 0750 -o root -g "$account" "$config"
+  if [ ! -s "$data/postgres/PG_VERSION" ]; then
+    runuser -u "$account" -- "$pg/initdb" -D "$data/postgres" --encoding=UTF8 --locale=C.UTF-8 --auth-local=peer --auth-host=scram-sha-256
+  fi
+  if [ ! -e "$config/app.env" ]; then
+    umask 077
+    temporary=$(mktemp "$config/app.env.XXXXXX")
+    trap 'rm -f "$temporary"' EXIT
+    key=$("$node" -p 'require("node:crypto").randomBytes(32).toString("hex")')
+    code=$("$node" -p 'require("node:crypto").randomBytes(12).toString("hex")')
+    {
+      printf '%s\n' 'NODE_ENV=production' 'PORT=3002' 'LISTEN_HOST=127.0.0.1' 'REGISTRATION=closed' 'EULA_REQUIRED=true'
+      printf '%s\n' 'DATABASE_URL=postgresql://blackcat-community@/postgres?host=%2Frun%2Fblackcat-community-db'
+      printf '%s\n' "UPLOAD_DIR=$data/uploads" "BACKUP_DIR=$data/backups" "BACKUP_PG_BIN=$pg" "APP_SECRET=$key" "SETUP_CODE=$code"
+    } > "$temporary"
+    mv "$temporary" "$config/app.env"
+    trap - EXIT
+  fi
+  if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload
+    systemctl enable blackcat-community-db.service blackcat-community.service
+    systemctl start blackcat-community-db.service
+    systemctl restart blackcat-community.service
+  fi
+fi

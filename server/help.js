@@ -13,6 +13,7 @@ const PAGES = {
   user: { file: "docs/USER_GUIDE.md", title: "Руководство пользователя" },
   admin: { file: "docs/ADMIN_GUIDE.md", title: "Руководство администратора" },
   install: { file: "README.md", title: "Установка и настройка" },
+  native: { file: "docs/NATIVE_INSTALL.md", title: "Установщики Windows и Ubuntu" },
   pilot: { file: "docs/PILOT.md", title: "Пилот" },
   privacy: { file: "docs/PERSONAL_DATA.md", title: "Персональные данные (152-ФЗ)" },
   upgrade: { file: "docs/UPGRADE.md", title: "Обновление" },

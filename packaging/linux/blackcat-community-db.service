@@ -1,0 +1,18 @@
+[Unit]
+Description=Dedicated PostgreSQL for BlackCat Testing Community
+
+[Service]
+User=blackcat-community
+Group=blackcat-community
+RuntimeDirectory=blackcat-community-db
+RuntimeDirectoryMode=0700
+ExecStart=/usr/lib/postgresql/16/bin/postgres -D /var/lib/blackcat-community/postgres -k /run/blackcat-community-db -c listen_addresses= -c unix_socket_permissions=0700
+Restart=on-failure
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/blackcat-community
+
+[Install]
+WantedBy=multi-user.target

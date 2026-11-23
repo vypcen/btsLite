@@ -265,34 +265,35 @@ test("Community: API функций Enterprise не доступен", async () 
   }
 });
 
-test("Community: 5 полных мест, в том числе при параллельных запросах и назначении роли в проекте", async () => {
-  const r = await u.admin.get("/api/admin/license");
-  assert.equal(r.status, 200);
-  assert.equal(r.data.edition, "lite");
-  assert.equal(r.data.full, 5);
-  assert.equal(r.data.view, null);
-  assert.equal((await u.tester.get("/api/admin/license")).status, 403);
-  const names = [];
-  const add = async (login, role) => {
-    names.push(login);
-    return u.admin.post("/api/admin/users", { login, name: "L", password: "Tb-pass-2026", role });
-  };
+test("Community: пять общих мест, в том числе при параллельных добавлении и разблокировке", async () => {
+  const isolated = await startServer();
   try {
-    for (let i = r.data.seats.full.used; i < 4; i++) assert.equal((await add(`lic${i}`, "tester")).status, 201);
-    const concurrent = await Promise.all([add("licx", "tester"), add("licy", "tester")]);
+    const admin = client(isolated.base);
+    const password = "Tb-pass-2026";
+    assert.equal((await admin.post("/api/auth/register", { login: "owner", name: "Владелец", password, setupCode: SETUP_CODE })).status, 201);
+    const add = (login, role) => admin.post("/api/admin/users", { login, name: "Участник", password, role });
+    for (const [login, role] of [["testone", "tester"], ["devone", "developer"], ["viewone", "viewer"]]) {
+      assert.equal((await add(login, role)).status, 201);
+    }
+    const concurrent = await Promise.all([add("viewtwo", "viewer"), add("devtwo", "developer")]);
     assert.deepEqual(concurrent.map((entry) => entry.status).sort(), [201, 409]);
-    assert.equal((await add("licv", "viewer")).status, 201);
-    assert.equal((await u.admin.put("/api/admin/users/licv/projects", { projects: [{ key: "LK", role: "tester" }] })).status, 409);
-    assert.equal((await u.admin.patch("/api/admin/users/licv", { blocked: true })).status, 200);
+    const license = await admin.get("/api/admin/license");
+    assert.equal(license.status, 200);
+    assert.equal(license.data.edition, "lite");
+    assert.deepEqual(license.data.seats, { used: 5, limit: 5 });
+    assert.equal((await client(isolated.base).post("/api/auth/register", { login: "selfreg", name: "Сам Записался", password })).status, 409);
+    assert.equal((await admin.patch("/api/admin/users/viewone", { role: "tester" })).status, 200);
+    assert.equal((await admin.patch("/api/admin/users/viewone", { blocked: true })).status, 200);
     const combined = await Promise.all([
-      u.admin.patch("/api/admin/users/licv", { blocked: false }),
-      u.admin.put("/api/admin/users/licv/projects", { projects: [{ key: "LK", role: "tester" }] }),
+      admin.patch("/api/admin/users/viewone", { blocked: false }),
+      add("testtwo", "tester"),
     ]);
     assert.deepEqual(combined.map((entry) => entry.status).sort(), [200, 409]);
-    assert.equal((await u.admin.put("/api/admin/license", { key: "TB1.e30.AAAA" })).status, 404);
-    assert.equal((await u.admin.get("/api/admin/license")).data.seats.full.used, 5);
+    assert.deepEqual((await admin.get("/api/admin/license")).data.seats, { used: 5, limit: 5 });
+    assert.equal((await u.tester.get("/api/admin/license")).status, 403);
+    assert.equal((await admin.put("/api/admin/license", { key: "TB1.e30.AAAA" })).status, 404);
   } finally {
-    for (const login of names) await u.admin.del(`/api/admin/users/${login}`);
+    await isolated.stop();
   }
 });
 
@@ -520,14 +521,16 @@ test("тест-планы: динамический фильтр, блокиро
 });
 
 test("администрирование: блокировка выкидывает из сессий, свою роль не поменять", async () => {
-  const c = client(srv.base);
-  assert.equal((await u.admin.post("/api/admin/users", { login: "temp", name: "T", password: "Tb-pass-2026", role: "developer" })).status, 201);
-  assert.equal((await c.post("/api/auth/login", { login: "temp", password: "Tb-pass-2026" })).status, 200);
-  assert.equal((await c.get("/api/state")).status, 200);
-  await u.admin.patch("/api/admin/users/temp", { blocked: true });
-  assert.equal((await c.get("/api/state")).status, 401);
-  assert.equal((await u.admin.patch("/api/admin/users/admin", { role: "tester" })).status, 409);
-  assert.equal((await u.tester.get("/api/admin/users")).status, 403);
+  try {
+    assert.equal((await u.outsider.get("/api/state")).status, 200);
+    assert.equal((await u.admin.patch("/api/admin/users/outsider", { blocked: true })).status, 200);
+    assert.equal((await u.outsider.get("/api/state")).status, 401);
+    assert.equal((await u.admin.patch("/api/admin/users/admin", { role: "tester" })).status, 409);
+    assert.equal((await u.tester.get("/api/admin/users")).status, 403);
+  } finally {
+    assert.equal((await u.admin.patch("/api/admin/users/outsider", { blocked: false })).status, 200);
+    assert.equal((await u.outsider.post("/api/auth/login", { login: "outsider", password: "Tb-pass-2026" })).status, 200);
+  }
 });
 
 test("служебное: проверки готовности и заголовки безопасности", async () => {

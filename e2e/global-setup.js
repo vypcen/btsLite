@@ -6,7 +6,7 @@ const { startServer, seed } = require("../test/helpers");
 module.exports = async () => {
   if (!fs.existsSync(path.join(__dirname, "..", "public", "index.html"))) throw new Error("Сначала соберите интерфейс: npm run build:web");
   const srv = await startServer();
-  await seed(srv);
+  await seed(srv, { outsider: false });
   process.env.E2E_BASE_URL = srv.base;
   globalThis.__E2E_SERVER__ = srv;
 };
