@@ -13,7 +13,7 @@ FROM node:24-alpine3.23
 ARG BUILD_COMMIT=""
 ARG BUILD_DATE=""
 ENV BUILD_COMMIT=$BUILD_COMMIT BUILD_DATE=$BUILD_DATE
-LABEL org.opencontainers.image.title="BlackCat Testing Lite" org.opencontainers.image.revision=$BUILD_COMMIT org.opencontainers.image.created=$BUILD_DATE
+LABEL org.opencontainers.image.title="BlackCat Testing Community" org.opencontainers.image.revision=$BUILD_COMMIT org.opencontainers.image.created=$BUILD_DATE
 
 WORKDIR /app
 ENV NODE_ENV=production

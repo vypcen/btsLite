@@ -12,8 +12,8 @@ async function login(page, login = "tester") {
 
 test("неверный пароль — понятная ошибка", async ({ page }) => {
   await page.goto("/");
-  await expect(page).toHaveTitle("BlackCat Testing Lite");
-  await expect(page.locator(".login .brand")).toContainText("BlackCat Testing Lite");
+  await expect(page).toHaveTitle("BlackCat Testing Community");
+  await expect(page.locator(".login .brand")).toContainText("BlackCat Testing Community");
   await page.getByLabel("Логин").fill("tester");
   await page.getByLabel("Пароль", { exact: true }).fill("wrong-password");
   await page.locator("form").getByRole("button", { name: "Войти" }).click();
@@ -226,10 +226,10 @@ test("модель кейса: поле в настройках, кейс со �
   await expect.poll(async () => (await (await api.get("/api/projects/LK/state")).json()).bugs.some((b) => b.title.includes("шаг 2"))).toBe(true);
 });
 
-test("Lite: видны лицензии и отсутствуют настройки Enterprise", async ({ page }) => {
+test("Community: видны лицензии и отсутствуют настройки Enterprise", async ({ page }) => {
   await login(page, "admin");
   await page.goto("/#/users/system");
-  await expect(page.getByRole("heading", { name: "BlackCat Testing Lite" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "BlackCat Testing Community" })).toBeVisible();
   await expect(page.getByText("Версия BlackCat Testing")).toBeVisible();
   await expect(page.getByRole("button", { name: "Ввести ключ" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Роли", exact: true })).toHaveCount(0);
@@ -598,7 +598,7 @@ test("автотесты: инструкции для Selenium в окне по�
   await expect(page.getByText(/AddTestAttachment/)).toBeVisible();
 });
 
-test("Lite: проект можно импортировать из JSON-экспорта", async ({ page }) => {
+test("Community: проект можно импортировать из JSON-экспорта", async ({ page }) => {
   await login(page, "admin");
   const source = await page.request.get("/api/projects/LK/export");
   expect(source.ok()).toBeTruthy();

@@ -101,7 +101,7 @@ function Topbar({ projectName, projectKey, users }: { projectName?: string; proj
         <a className="btn ghost" href={href("help", "user")} style={{ textDecoration: "none" }} title="Руководства пользователя и администратора, API">Справка</a>
         {me?.role === "admin" && <a className="btn" href={href("users")} style={{ textDecoration: "none" }}>Пользователи</a>}
         {me && (
-          <span className="user who" title={`@${me.login} · ${roleList.name(me.role)}\n${roleList.all.find((r) => r.key === me.role)?.hint || ""}${me.version ? `\nBlackCat Testing Lite ${me.version}` : ""}`}>
+          <span className="user who" title={`@${me.login} · ${roleList.name(me.role)}\n${roleList.all.find((r) => r.key === me.role)?.hint || ""}${me.version ? `\nBlackCat Testing Community ${me.version}` : ""}`}>
             <Avatar login={me.login} />
             <span>{me.name}</span>
             <span className="mono user-extra" style={{ fontSize: 12 }}>@{me.login} · {roleList.name(me.role)}</span>

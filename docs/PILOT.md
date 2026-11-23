@@ -1,4 +1,4 @@
-# Пилот BlackCat Testing Lite: план на 3–4 недели
+# Пилот BlackCat Testing Community: план на 3–4 недели
 
 Цель пилота — на реальном проекте и реальной команде проверить, что BlackCat Testing заменяет текущий инструмент (TestRail, Test IT, Excel, Jira + плагин) и что команде в нём удобно работать.
 

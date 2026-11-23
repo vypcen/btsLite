@@ -147,7 +147,7 @@ function LicenseCard() {
   const { value, error } = useLoad<{ seats: { full: { used: number; limit: number }; view: { used: number } } }>("/api/admin/license");
   return (
     <section className="card">
-      <h3 style={{ marginTop: 0 }}>BlackCat Testing Lite</h3>
+      <h3 style={{ marginTop: 0 }}>BlackCat Testing Community</h3>
       {error ? <div className="banner">{error}</div> : !value ? <div className="skel">Загружаем сведения о местах…</div> : (
         <dl>
           <dt>Полные места</dt><dd>{value.seats.full.used} из {value.seats.full.limit}</dd>

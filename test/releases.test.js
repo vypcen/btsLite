@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { startServer, seed } = require("./helpers");
 
-test("релиз Lite: простая карточка и связь с прогоном, без спринтов и готовности", async (t) => {
+test("релиз Community: простая карточка и связь с прогоном, без спринтов и готовности", async (t) => {
   const srv = await startServer();
   t.after(() => srv.stop());
   const { tester } = await seed(srv);

@@ -24,15 +24,15 @@ async function tx(fn) {
   }
 }
 
-// Отдельное подключение удерживает блокировку до остановки экземпляра Lite.
+// Отдельное подключение удерживает блокировку до остановки экземпляра Community.
 async function lockInstance() {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   try {
     const { rows } = await client.query("SELECT pg_try_advisory_lock(7204313) AS acquired");
-    if (!rows[0].acquired) throw new Error("К этой базе уже подключён экземпляр BlackCat Testing Lite");
+    if (!rows[0].acquired) throw new Error("К этой базе уже подключён экземпляр BlackCat Testing Community");
     client.on("error", (error) => {
-      console.error("[db] Потеряна блокировка экземпляра Lite:", error.message);
+      console.error("[db] Потеряна блокировка экземпляра Community:", error.message);
       process.exit(1);
     });
     return client;

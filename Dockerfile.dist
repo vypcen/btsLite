@@ -1,5 +1,5 @@
 # Образ для клиентов (пилот и поставка): без исходного кода, тестов и инструментов разработчика.
-#   docker build -f Dockerfile.dist -t blackcat-testing-lite:1.1.0 .
+#   docker build -f Dockerfile.dist -t blackcat-testing-community:1.1.0 .
 # Для развёртывания используйте docker-compose.yml и README.md.
 
 # 1. Интерфейс
@@ -26,7 +26,7 @@ FROM node:24-alpine3.23
 ARG BUILD_COMMIT=""
 ARG BUILD_DATE=""
 ENV BUILD_COMMIT=$BUILD_COMMIT BUILD_DATE=$BUILD_DATE
-LABEL org.opencontainers.image.title="BlackCat Testing Lite" org.opencontainers.image.vendor="BlackCatSoftware" \
+LABEL org.opencontainers.image.title="BlackCat Testing Community" org.opencontainers.image.vendor="BlackCatSoftware" \
       org.opencontainers.image.licenses="LicenseRef-BlackCatSoftware-EULA" \
       org.opencontainers.image.revision=$BUILD_COMMIT org.opencontainers.image.created=$BUILD_DATE
 

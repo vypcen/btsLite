@@ -26,7 +26,7 @@ test("накат с нуля и повторный запуск на той же
   assert.equal(rerun.status, 0, rerun.stderr);
   const duplicate = spawnSync(process.execPath, ["server/index.js"], { env, encoding: "utf8", timeout: 10000 });
   assert.equal(duplicate.status, 1);
-  assert.match(duplicate.stderr, /уже подключён экземпляр BlackCat Testing Lite/);
+  assert.match(duplicate.stderr, /уже подключён экземпляр BlackCat Testing Community/);
   await srv.stop();
 });
 

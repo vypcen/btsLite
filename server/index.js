@@ -446,7 +446,7 @@ app.use((err, req, res, _next) => {
   jobs.start();
   const server = app.listen(PORT, "0.0.0.0", () => {
     ready = true;
-    console.log(`[server] BlackCat Testing Lite ${version.VERSION}${version.COMMIT ? ` (${version.COMMIT.slice(0, 8)})` : ""} запущен: http://localhost:${PORT}`);
+    console.log(`[server] BlackCat Testing Community ${version.VERSION}${version.COMMIT ? ` (${version.COMMIT.slice(0, 8)})` : ""} запущен: http://localhost:${PORT}`);
   });
   // Kubernetes присылает SIGTERM: сначала перестаём числиться готовыми, дожидаемся текущих запросов, закрываем соединения
   const shutdown = (signal) => {

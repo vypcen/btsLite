@@ -250,7 +250,7 @@ test("версия: в /api/auth/me и сведения о системе для
   assert.equal(r.data.history[0].version, v);
 });
 
-test("Lite: API функций Enterprise не доступен", async () => {
+test("Community: API функций Enterprise не доступен", async () => {
   for (const path of [
     "/api/llm/status",
     "/api/admin/llm",
@@ -265,7 +265,7 @@ test("Lite: API функций Enterprise не доступен", async () => {
   }
 });
 
-test("Lite: 5 полных мест, в том числе при параллельных запросах и назначении роли в проекте", async () => {
+test("Community: 5 полных мест, в том числе при параллельных запросах и назначении роли в проекте", async () => {
   const r = await u.admin.get("/api/admin/license");
   assert.equal(r.status, 200);
   assert.equal(r.data.edition, "lite");
@@ -296,7 +296,7 @@ test("Lite: 5 полных мест, в том числе при паралле�
   }
 });
 
-test("Lite: корпоративное администрирование недоступно даже администратору", async () => {
+test("Community: корпоративное администрирование недоступно даже администратору", async () => {
   for (const route of ["/api/auth/oidc/start", "/api/auth/kerberos", "/api/admin/roles", "/api/projects/LK/configs"]) {
     assert.equal((await u.admin.get(route)).status, 404, route);
   }
