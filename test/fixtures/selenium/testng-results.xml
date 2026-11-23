@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testng-results ignored="0" total="6" passed="3" failed="2" skipped="1">
+  <reporter-output></reporter-output>
+  <suite name="Selenium UI" duration-ms="5400" started-at="2026-11-16T07:00:00Z" finished-at="2026-11-16T07:00:05Z">
+    <groups></groups>
+    <test name="Chrome" duration-ms="5400">
+      <class name="com.shop.ui.LoginTest">
+        <test-method status="PASS" signature="setUp()" name="setUp" is-config="true" duration-ms="900" started-at="x" finished-at="y"></test-method>
+        <test-method status="PASS" signature="loginByPassword()" name="loginByPassword" duration-ms="1200" description="Вход по паролю LK-CASE" started-at="x" finished-at="y">
+          <reporter-output><line><![CDATA[Открыта страница входа]]></line></reporter-output>
+        </test-method>
+        <test-method status="FAIL" signature="loginWrongPassword()" name="loginWrongPassword" duration-ms="800" started-at="x" finished-at="y">
+          <exception class="java.lang.AssertionError">
+            <message><![CDATA[expected [Неверный пароль] but found [Ошибка 500]]]></message>
+            <full-stacktrace><![CDATA[java.lang.AssertionError: expected [Неверный пароль] but found [Ошибка 500]
+	at com.shop.ui.LoginTest.loginWrongPassword(LoginTest.java:42)]]></full-stacktrace>
+          </exception>
+          <reporter-output><line><![CDATA[[[ATTACHMENT|screens/wrong-password.png]]]]></line></reporter-output>
+        </test-method>
+        <test-method status="FAIL" signature="openProfile()" name="openProfile" duration-ms="3000" started-at="x" finished-at="y">
+          <exception class="org.openqa.selenium.NoSuchElementException">
+            <message><![CDATA[no such element: Unable to locate element: {"method":"css selector","selector":"#profile"}]]></message>
+            <full-stacktrace><![CDATA[org.openqa.selenium.NoSuchElementException: no such element]]></full-stacktrace>
+          </exception>
+        </test-method>
+      </class>
+      <class name="com.shop.ui.CartTest">
+        <test-method status="SKIP" signature="addToCart()" name="addToCart" retried="true" duration-ms="500" started-at="x" finished-at="y">
+          <exception class="java.lang.AssertionError"><message><![CDATA[timeout]]></message></exception>
+        </test-method>
+        <test-method status="PASS" signature="addToCart()" name="addToCart" duration-ms="700" started-at="x" finished-at="y"></test-method>
+        <test-method status="PASS" signature="search(java.lang.String)" name="search" duration-ms="400" data-provider="queries" started-at="x" finished-at="y">
+          <params><param index="0"><value><![CDATA[ноутбук]]></value></param></params>
+        </test-method>
+        <test-method status="SKIP" signature="checkout()" name="checkout" duration-ms="0" started-at="x" finished-at="y">
+          <exception class="org.testng.SkipException"><message><![CDATA[Платёжный стенд недоступен]]></message></exception>
+        </test-method>
+      </class>
+    </test>
+  </suite>
+</testng-results>

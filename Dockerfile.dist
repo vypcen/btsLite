@@ -1,0 +1,50 @@
+# Образ для клиентов (пилот и поставка): без исходного кода, тестов и инструментов разработчика.
+#   docker build -f Dockerfile.dist -t blackcat-testing-lite:1.1.0 .
+# Для развёртывания используйте docker-compose.yml и README.md.
+
+# 1. Интерфейс
+FROM node:24-alpine3.23 AS web
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web ./
+RUN npm run build
+
+# 2. Сборка сервера: один файл на точку входа, сжатие и обфускация (scripts/build-dist.js)
+FROM node:24-alpine3.23 AS dist
+WORKDIR /src
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY server ./server
+COPY scripts ./scripts
+COPY docs ./docs
+COPY README.md CHANGELOG.md .env.example LICENSE-EULA.md ./
+RUN node scripts/build-dist.js
+
+# 3. Итоговый образ
+FROM node:24-alpine3.23
+ARG BUILD_COMMIT=""
+ARG BUILD_DATE=""
+ENV BUILD_COMMIT=$BUILD_COMMIT BUILD_DATE=$BUILD_DATE
+LABEL org.opencontainers.image.title="BlackCat Testing Lite" org.opencontainers.image.vendor="BlackCatSoftware" \
+      org.opencontainers.image.licenses="LicenseRef-BlackCatSoftware-EULA" \
+      org.opencontainers.image.revision=$BUILD_COMMIT org.opencontainers.image.created=$BUILD_DATE
+
+WORKDIR /app
+ENV NODE_ENV=production
+# Клиентская поставка: при первом запуске администратор принимает лицензионное соглашение (server/eula.js)
+ENV EULA_REQUIRED=true
+ENV UPLOAD_DIR=/app/data/uploads
+RUN apk add --no-cache postgresql16-client
+
+COPY --from=dist /src/dist/package.json /src/dist/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+COPY --from=dist /src/dist ./
+COPY --from=web /public ./public
+RUN mkdir -p /app/data/uploads /app/data/backups && chown -R node:node /app/data
+
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
+  CMD wget -qO- http://127.0.0.1:3000/healthz || exit 1
+CMD ["node", "server/index.js"]

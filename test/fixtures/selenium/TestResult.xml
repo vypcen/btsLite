@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<test-run id="0" testcasecount="4" result="Failed" total="4" passed="2" failed="1" inconclusive="0" skipped="1" duration="3.2">
+  <test-suite type="Assembly" name="Shop.UiTests.dll" fullname="Shop.UiTests.dll">
+    <test-suite type="TestSuite" name="Shop" fullname="Shop">
+      <test-suite type="TestFixture" name="SearchTests" fullname="Shop.UiTests.SearchTests" classname="Shop.UiTests.SearchTests">
+        <test-case id="1" name="SearchByName" fullname="Shop.UiTests.SearchTests.SearchByName" methodname="SearchByName" classname="Shop.UiTests.SearchTests" result="Passed" duration="0.9">
+          <properties><property name="Description" value="Поиск товара LK-CASE" /></properties>
+        </test-case>
+        <test-case id="2" name="SearchEmpty" fullname="Shop.UiTests.SearchTests.SearchEmpty" classname="Shop.UiTests.SearchTests" result="Failed" label="Error" duration="1.5">
+          <failure>
+            <message><![CDATA[OpenQA.Selenium.WebDriverTimeoutException : Timed out after 10 seconds]]></message>
+            <stack-trace><![CDATA[at Shop.UiTests.SearchTests.SearchEmpty() in SearchTests.cs:line 31]]></stack-trace>
+          </failure>
+          <output><![CDATA[Скриншот сохранён]]></output>
+          <attachments><attachment><filePath>screens/search-empty.png</filePath><description>Скриншот</description></attachment></attachments>
+        </test-case>
+        <test-case id="3" name="Filter(&quot;Цена&quot;)" fullname="x" classname="Shop.UiTests.SearchTests" result="Passed" duration="0.5" />
+        <test-case id="4" name="Compare" fullname="x" classname="Shop.UiTests.SearchTests" result="Skipped" label="Ignored" duration="0">
+          <reason><message><![CDATA[Пока не реализовано]]></message></reason>
+        </test-case>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>

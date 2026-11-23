@@ -1,0 +1,126 @@
+export class ApiError extends Error {
+  // data — весь ответ сервера: например, {twoFactor: true} при входе или {code: "password_change_required"}
+  constructor(public status: number, message: string, public data: any = {}) {
+    super(message);
+  }
+}
+
+// Сервер требует сменить пароль или включить 2FA: приложение покажет нужный экран (App.tsx)
+let onPending = (_code: string) => {};
+export function setPendingHandler(fn: (code: string) => void) {
+  onPending = fn;
+}
+
+let onUnauthorized = () => {};
+export function setUnauthorizedHandler(fn: () => void) {
+  onUnauthorized = fn;
+}
+
+export type ProjectChange = { type: string; pid: string | null; caseNum?: number };
+let onMutation = (_changes: ProjectChange[] | null) => {};
+export function setMutationHandler(fn: (changes: ProjectChange[] | null) => void) {
+  onMutation = fn;
+}
+
+function notifyMutation(res: Response) {
+  let changes = null;
+  try {
+    changes = JSON.parse(res.headers.get("X-TestBall-Changes") || "null");
+  } catch {}
+  onMutation(Array.isArray(changes) && changes.length ? changes : null);
+}
+
+async function parse<T>(res: Response, url: string): Promise<T> {
+  let json: any = {};
+  try {
+    json = await res.json();
+  } catch {}
+  if (!res.ok) {
+    if (res.status === 401 && !url.startsWith("/api/auth/")) onUnauthorized();
+    if (res.status === 403 && (json.code === "password_change_required" || json.code === "2fa_setup_required")) onPending(json.code);
+    throw new ApiError(res.status, json.error || `Ошибка сервера (${res.status})`, json);
+  }
+  return json as T;
+}
+
+const NO_NET = "Нет связи с сервером. Проверьте подключение и повторите попытку.";
+
+export async function api<T = any>(method: string, url: string, body?: unknown): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      credentials: "same-origin",
+      // изменяющие запросы сервер принимает только как JSON (защита от CSRF) — даже без данных шлём {}
+      headers: method !== "GET" ? { "Content-Type": "application/json" } : {},
+      body: method !== "GET" ? JSON.stringify(body ?? {}) : undefined,
+    });
+  } catch {
+    throw new ApiError(0, NO_NET);
+  }
+  const value = await parse<T>(res, url);
+  if (method !== "GET") notifyMutation(res);
+  return value;
+}
+
+// Файл уходит «сырым» телом; X-Upload нужен серверной защите от CSRF
+export async function upload(url: string, file: File): Promise<{ id: string }> {
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+        "X-Filename": encodeURIComponent(file.name || "file"),
+        "X-Upload": "1",
+      },
+      body: file,
+    });
+  } catch {
+    throw new ApiError(0, NO_NET);
+  }
+  const value = await parse<{ id: string }>(res, url);
+  notifyMutation(res);
+  return value;
+}
+
+const e = encodeURIComponent;
+export const paths = {
+  project: (k: string) => `/api/projects/${e(k)}`,
+  cases: (k: string) => `/api/projects/${e(k)}/cases`,
+  testCase: (k: string, n: number) => `/api/projects/${e(k)}/cases/${n}`,
+  moveCases: (k: string) => `/api/projects/${e(k)}/cases/move`,
+  folders: (k: string) => `/api/projects/${e(k)}/folders`,
+  folder: (k: string, id: number) => `/api/projects/${e(k)}/folders/${id}`,
+  runs: (k: string) => `/api/projects/${e(k)}/runs`,
+  run: (k: string, n: number) => `/api/projects/${e(k)}/runs/${n}`,
+  runResults: (k: string, n: number) => `/api/projects/${e(k)}/runs/${n}/results`,
+  caseHistory: (k: string, n: number) => `/api/projects/${e(k)}/cases/${n}/history`,
+  result: (k: string, run: number, caseNum: number) => `/api/projects/${e(k)}/runs/${run}/results/${caseNum}`,
+  bugs: (k: string) => `/api/projects/${e(k)}/bugs`,
+  bug: (k: string, n: number) => `/api/projects/${e(k)}/bugs/${n}`,
+  comment: (k: string, id: number) => `/api/projects/${e(k)}/comments/${id}`,
+  file: (id: string) => `/api/attachments/${e(id)}`,
+  autoruns: (k: string) => `/api/projects/${e(k)}/autoruns`,
+  autorun: (k: string, n: number) => `/api/projects/${e(k)}/autoruns/${n}`,
+  autoFiles: (k: string, n: number, rid: number) => `/api/projects/${e(k)}/autoruns/${n}/results/${rid}/attachments`,
+  autotests: (k: string) => `/api/projects/${e(k)}/autotests`,
+  tokens: "/api/tokens",
+  casesExport: (k: string) => `/api/projects/${e(k)}/cases/export`,
+  casesImport: (k: string) => `/api/projects/${e(k)}/cases/import`,
+  versions: (k: string, n: number) => `/api/projects/${e(k)}/cases/${n}/versions`,
+  plans: (k: string) => `/api/projects/${e(k)}/plans`,
+  plan: (k: string, n: number) => `/api/projects/${e(k)}/plans/${n}`,
+  distribute: (k: string, run: number) => `/api/projects/${e(k)}/runs/${run}/distribute`,
+  webhooks: (k: string) => `/api/projects/${e(k)}/webhooks`,
+  webhook: (k: string, id: number) => `/api/projects/${e(k)}/webhooks/${id}`,
+  tracker: (k: string) => `/api/projects/${e(k)}/tracker`,
+  bugExternal: (k: string, n: number) => `/api/projects/${e(k)}/bugs/${n}/external`,
+  ciJobs: (k: string) => `/api/projects/${e(k)}/ci-jobs`,
+  ciJob: (k: string, id: number) => `/api/projects/${e(k)}/ci-jobs/${id}`,
+  autotest: (k: string, id: number) => `/api/projects/${e(k)}/autotests/${id}`,
+  analytics: (k: string, days: number) => `/api/projects/${e(k)}/analytics?days=${days}`,
+  projectExport: (k: string, files: boolean) => `/api/projects/${e(k)}/export${files ? "?files=1" : ""}`,
+  projectImport: "/api/projects-import",
+};

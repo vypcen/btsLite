@@ -1,0 +1,26 @@
+node_modules
+.env
+backups/
+# выгрузка из прошлой версии содержит хэши паролей — в репозиторий не кладём
+import/*.json
+# вложения при запуске без Docker
+data/
+# собранный интерфейс (npm run build:web)
+public/
+.DS_Store
+# результаты E2E
+test-results/
+playwright-report/
+
+# закрытые ключи (лицензии и т. п.) — никогда не в репозиторий; тестовый ключ — исключение
+*.pem
+!test/fixtures/license-test-private.pem
+demo-accounts.md
+
+# testbolctl: собранные файлы
+cli/lib/
+cli/dist/
+
+# клиентская сборка (scripts/build-dist.js) и комплекты для клиентов (scripts/pack-trial.sh)
+dist/
+trial-packages/

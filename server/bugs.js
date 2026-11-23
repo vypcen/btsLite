@@ -1,0 +1,168 @@
+// Баг-репорты. Монтируется на /api/projects/:key
+const express = require("express");
+const casemodel = require("./casemodel");
+const { pool, tx } = require("./db");
+const { broadcast } = require("./live");
+const events = require("./events");
+const releases = require("./releases");
+const notify = require("./notify");
+const { wrap, str, tooLong, num } = require("./util");
+
+const SEVERITIES = ["blocker", "critical", "major", "minor"];
+// Допустимые переходы жизненного цикла. Тот же список есть в web/src/labels.ts
+const FLOW = {
+  new: ["in_progress", "rejected", "duplicate"],
+  in_progress: ["fixed", "new", "rejected"],
+  fixed: ["verified", "in_progress"],
+  verified: ["closed", "in_progress"],
+  closed: ["in_progress"],
+  rejected: ["new"],
+  duplicate: ["new"],
+};
+const LABELS = { new: "Новый", in_progress: "В работе", fixed: "Исправлен", verified: "Проверен", closed: "Закрыт", rejected: "Отклонён", duplicate: "Дубликат" };
+
+const router = express.Router({ mergeParams: true });
+
+// Исполнитель — участник проекта или админ. undefined — такого нет
+async function userId(db, key, login) {
+  if (!login) return null;
+  const { rows } = await db.query(
+    `SELECT id FROM users u WHERE login=$1 AND NOT blocked
+       AND (role='admin' OR EXISTS (SELECT 1 FROM project_members m WHERE m.user_id=u.id AND m.project_key=$2))`,
+    [login, key]
+  );
+  return rows[0] ? rows[0].id : undefined;
+}
+
+function readBug(body) {
+  const b = {
+    title: str(body.title, 500),
+    severity: str(body.severity, 20),
+    assignee: str(body.assignee, 64),
+    env: str(body.env, 500),
+    steps: str(body.steps),
+    actual: str(body.actual),
+    expected: str(body.expected),
+  };
+  if (!b.title) return { error: "Укажите заголовок бага" };
+  if (tooLong(body.title, 500, "Заголовок")) return { error: tooLong(body.title, 500, "Заголовок") };
+  if (!SEVERITIES.includes(b.severity)) return { error: "Неизвестная серьёзность" };
+  return { b };
+}
+
+router.post("/bugs", wrap(async (req, res) => {
+  const { b, error } = readBug(req.body);
+  if (error) return res.status(400).json({ error });
+  const key = req.params.key;
+  const tags = casemodel.normalizeTags(req.body.tags) || [];
+  const cf = await casemodel.readFields(pool, key, "bug", req.body.fields, {});
+  if (cf.error) return res.status(400).json({ error: cf.error });
+  const rel = await releases.releaseId(pool, key, req.body.release);
+  if (rel.error) return res.status(400).json({ error: rel.error });
+  const out = await tx(async (db) => {
+    const assignee = await userId(db, key, b.assignee);
+    if (assignee === undefined) return { status: 400, error: "Исполнитель не найден среди участников проекта" };
+    // связь с кейсом и, если баг заведён из прогона, с конкретным результатом
+    let caseId = null, resultId = null;
+    if (req.body.caseNum != null) {
+      const c = await db.query("SELECT id FROM test_cases WHERE project_key=$1 AND num=$2", [key, num(req.body.caseNum)]);
+      if (!c.rows[0]) return { status: 400, error: "Связанный тест-кейс не найден" };
+      caseId = c.rows[0].id;
+      if (req.body.runNum != null) {
+        const r = await db.query(
+          "SELECT rr.id FROM run_results rr JOIN test_runs t ON t.id=rr.run_id WHERE t.project_key=$1 AND t.num=$2 AND rr.case_id=$3",
+          [key, num(req.body.runNum), caseId]
+        );
+        if (!r.rows[0]) return { status: 400, error: "Кейс не входит в указанный прогон" };
+        resultId = r.rows[0].id;
+      }
+    }
+    const seq = await db.query("UPDATE projects SET bug_seq=bug_seq+1 WHERE key=$1 RETURNING bug_seq", [key]);
+    if (!seq.rows[0]) return { status: 404, error: "Проект не найден" };
+    const n = seq.rows[0].bug_seq;
+    await db.query(
+      `INSERT INTO bugs(project_key, num, title, severity, assignee_id, environment, steps, actual, expected,
+         case_id, run_result_id, created_by, updated_by, tags, fields, release_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12,$13,$14,$15)`,
+      [key, n, b.title, b.severity, assignee, b.env, b.steps, b.actual, b.expected, caseId, resultId, req.user.id, tags, cf.fields, rel.id]
+    );
+    await db.query(
+      "INSERT INTO bug_status_log(bug_id, from_status, to_status, changed_by) SELECT id, NULL, 'new', $3 FROM bugs WHERE project_key=$1 AND num=$2",
+      [key, n, req.user.id]
+    );
+    const bugId = (await db.query("SELECT id FROM bugs WHERE project_key=$1 AND num=$2", [key, n])).rows[0].id;
+    return { n, bugId, assignee };
+  });
+  if (out.error) return res.status(out.status).json({ error: out.error });
+  broadcast("bugs");
+  events.emit(key, "bug.created", { bug: await events.snap.bug(key, out.n) }, req.user);
+  await notify.onBugCreated(req, { bugId: out.bugId, num: out.n, title: b.title, assigneeId: out.assignee }).catch((e) => console.error("[notify]", e.message));
+  res.status(201).json({ num: out.n });
+}));
+
+router.patch("/bugs/:num", wrap(async (req, res) => {
+  const key = req.params.key, n = num(req.params.num);
+  const { rows } = await pool.query(
+    `SELECT b.id, b.title, b.severity, u.login AS assignee, b.assignee_id, b.environment AS env, b.steps, b.actual, b.expected,
+       b.status, b.duplicate_of, b.tags, b.fields
+     FROM bugs b LEFT JOIN users u ON u.id=b.assignee_id WHERE b.project_key=$1 AND b.num=$2`,
+    [key, n]
+  );
+  const cur = rows[0];
+  if (!cur) return res.status(404).json({ error: "Баг не найден" });
+  // частичное обновление: можно прислать только status или assignee
+  const { b, error } = readBug({ ...cur, assignee: cur.assignee || "", ...req.body });
+  if (error) return res.status(400).json({ error });
+  // прежнего исполнителя, которого с тех пор убрали из проекта, можно оставить
+  const assignee = b.assignee === cur.assignee ? cur.assignee_id : await userId(pool, key, b.assignee);
+  if (assignee === undefined) return res.status(400).json({ error: "Исполнитель не найден среди участников проекта" });
+  const tags = req.body.tags === undefined ? cur.tags : casemodel.normalizeTags(req.body.tags);
+  const cf = await casemodel.readFields(pool, key, "bug", req.body.fields, cur.fields);
+  if (cf.error) return res.status(400).json({ error: cf.error });
+
+  const rel = req.body.release === undefined ? null : await releases.releaseId(pool, key, req.body.release);
+  if (rel?.error) return res.status(400).json({ error: rel.error });
+  const status = req.body.status === undefined ? cur.status : str(req.body.status, 20);
+  if (status !== cur.status && !(FLOW[cur.status] || []).includes(status)) {
+    return res.status(409).json({ error: `Нельзя перевести баг из «${LABELS[cur.status]}» в «${LABELS[status] || status}»` });
+  }
+  let dup = null;
+  if (status === "duplicate") {
+    if (req.body.duplicateOf == null && cur.duplicate_of) dup = cur.duplicate_of;
+    else {
+      const d = await pool.query("SELECT id FROM bugs WHERE project_key=$1 AND num=$2", [key, num(req.body.duplicateOf)]);
+      if (!d.rows[0]) return res.status(400).json({ error: "Укажите баг, дубликатом которого является этот" });
+      if (d.rows[0].id === cur.id) return res.status(400).json({ error: "Баг не может быть дубликатом самого себя" });
+      dup = d.rows[0].id;
+    }
+  }
+  await tx(async (db) => {
+    await db.query(
+      `UPDATE bugs SET title=$1, severity=$2, assignee_id=$3, environment=$4, steps=$5, actual=$6, expected=$7,
+         status=$8, duplicate_of=$9, updated_by=$10, updated_at=now(), tags=$12, fields=$13 WHERE id=$11`,
+      [b.title, b.severity, assignee, b.env, b.steps, b.actual, b.expected, status, dup, req.user.id, cur.id, tags, cf.fields]
+    );
+    if (rel) await db.query("UPDATE bugs SET release_id=$2 WHERE id=$1", [cur.id, rel.id]);
+    if (status !== cur.status) {
+      await db.query("INSERT INTO bug_status_log(bug_id, from_status, to_status, changed_by) VALUES ($1,$2,$3,$4)", [cur.id, cur.status, status, req.user.id]);
+    }
+  });
+  broadcast("bugs");
+  const bug = await events.snap.bug(key, n);
+  const nf = (p) => p.catch((e) => console.error("[notify]", e.message));
+  if (assignee && assignee !== cur.assignee_id) await nf(notify.onBugAssigned(req, { bugId: cur.id, num: n, title: b.title, assigneeId: assignee }));
+  if (status !== cur.status) await nf(notify.onBugStatus(req, { bugId: cur.id, num: n, title: b.title, from: cur.status, to: status }));
+  if (status !== cur.status) events.emit(key, "bug.status", { bug, from: cur.status, to: status }, req.user);
+  else events.emit(key, "bug.updated", { bug }, req.user);
+  res.json({ ok: true });
+}));
+
+router.delete("/bugs/:num", wrap(async (req, res) => {
+  // в корзину: баг с комментариями, вложениями и историей статусов можно восстановить (server/trash.js)
+  const r = await require("./trash").remove(req, "bug", num(req.params.num));
+  if (!r) return res.status(404).json({ error: "Баг не найден" });
+  broadcast("bugs");
+  res.json({ ok: true, trashId: r.trashId });
+}));
+
+module.exports = router;

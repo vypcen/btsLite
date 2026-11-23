@@ -1,0 +1,51 @@
+name: blackcat-testing-lite
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      # Имена базы и пользователя остались от прежнего названия проекта. Не меняйте их:
+      # PostgreSQL создаёт их только при первом запуске, и приложение потеряет доступ к уже созданной базе.
+      POSTGRES_DB: testbed
+      POSTGRES_USER: testbed
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Задайте POSTGRES_PASSWORD в файле .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U testbed -d testbed"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Порт базы наружу не открыт: к ней обращается только приложение внутри Docker.
+
+  app:
+    build: .
+    restart: unless-stopped
+    # все настройки из .env (настройки хранилища и интеграций); строки environment ниже имеют приоритет
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://testbed:${POSTGRES_PASSWORD}@db:5432/testbed
+      PORT: 3000
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-20}
+      ADMIN_LOGIN: ${ADMIN_LOGIN:-}
+      REGISTRATION: ${REGISTRATION:-closed}
+      SETUP_CODE: ${SETUP_CODE:-}
+      TRUST_PROXY: ${TRUST_PROXY:-}
+    # По умолчанию приложение доступно только с этого компьютера: снаружи — через туннель или прокси.
+    # Для доступа из локальной сети задайте APP_BIND=0.0.0.0
+    ports:
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-3002}:3000"
+    volumes:
+      - ./import:/app/import:ro
+      - uploads:/app/data/uploads
+      # резервные копии из интерфейса («Пользователи → Резервные копии»): лежат в папке backups/ рядом с проектом
+      # и переживают docker compose down -v
+      - ./backups:/app/data/backups
+
+volumes:
+  pgdata:
+  uploads:
