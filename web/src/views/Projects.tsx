@@ -42,6 +42,7 @@ export function Projects({ missing }: { missing?: string }) {
       <div className="head">
         <div>
           <h1>Проекты</h1>
+          <p className="muted small">До 2 активных проектов на установку Community</p>
           <p className="muted">Проекты, к которым у вас есть доступ</p>
         </div>
         <div className="spacer" />

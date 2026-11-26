@@ -78,7 +78,6 @@ if (-not (Test-Path -LiteralPath $Config)) {
         'PORT=3002'
         'LISTEN_HOST=127.0.0.1'
         'REGISTRATION=closed'
-        'EULA_REQUIRED=true'
         "DATABASE_URL=postgresql://postgres:${password}@127.0.0.1:${PgPort}/postgres"
         ('UPLOAD_DIR="{0}"' -f (Join-Path $Data 'uploads'))
         ('BACKUP_DIR="{0}"' -f (Join-Path $Data 'backups'))

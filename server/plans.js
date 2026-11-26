@@ -28,6 +28,7 @@ function readFilter(f = {}) {
     folders: Array.isArray(f.folders) ? f.folders.map(num).filter(Boolean).slice(0, 200) : [],
     // корень проекта (кейсы без папки)
     root: f.root === true,
+    ...(f.emptyFolders === true && { emptyFolders: true }),
     priorities: pick(f.priorities, PRIORITIES),
     // по умолчанию в динамический план идут только готовые кейсы
     statuses: f.statuses === undefined ? ["ready"] : pick(f.statuses, STATUSES),
@@ -42,6 +43,7 @@ function readFilter(f = {}) {
 
 // Кейсы по фильтру: [{id, num, version}]
 async function byFilter(db, key, f) {
+  if (f.emptyFolders && !f.folders.length && !f.root) return [];
   const { rows } = await db.query(
     `WITH RECURSIVE sub AS (
        SELECT id FROM case_folders WHERE project_key=$1 AND id = ANY($2::int[])
@@ -341,4 +343,13 @@ router.post("/plans/:num/runs", wrap(async (req, res) => {
   res.status(201).json({ num: out.n, distribution: out.dist, runs: [out.n], batch: null });
 }));
 
-module.exports = { router, byFilter, readFilter, planCases };
+function remapPlanFilter(plan, folderId) {
+  const filter = plan.filter && typeof plan.filter === "object" ? { ...plan.filter } : {};
+  if (plan.mode === "dynamic" && Array.isArray(filter.folders) && filter.folders.length) {
+    filter.folders = filter.folders.map((id) => folderId.get(id) ?? folderId.get(num(id))).filter(Boolean);
+    if (!filter.folders.length && filter.root !== true) filter.emptyFolders = true;
+  }
+  return filter;
+}
+
+module.exports = { router, byFilter, readFilter, planCases, remapPlanFilter };

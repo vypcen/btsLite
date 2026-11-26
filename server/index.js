@@ -100,28 +100,26 @@ app.use((req, res, next) => {
   if (!p || req.viaToken || !req.path.startsWith("/api/") || PENDING_OK.test(req.path)) return next();
   res.status(403).json({ error: security.PENDING_TEXT[p], code: p === "password" ? "password_change_required" : "2fa_setup_required" });
 });
-// Лицензионное соглашение клиентской сборки (EULA_REQUIRED=true): до принятия администратором — только вход и справка
-const eula = require("./eula");
-app.use(eula.middleware());
 // Результаты автотестов приходят пачками вместе со стектрейсами — им нужен лимит побольше
+const attachmentUpload = (req) => req.method === "POST" && req.path.endsWith("/attachments") && req.get("x-upload") === "1";
 const bigJson = express.json({ limit: "10mb" });
-app.use("/api/projects/:key/autoruns", (req, res, next) => (req.user ? bigJson(req, res, next) : next()));
+app.use("/api/projects/:key/autoruns", (req, res, next) => (req.user && !attachmentUpload(req) ? bigJson(req, res, next) : next()));
 // импорт тест-кейсов — CSV на тысячи строк
 // импорт из Excel присылает файл в base64 — до 15 МБ файла
 const importJson = express.json({ limit: "25mb" });
 app.use("/api/projects/:key/cases/import", (req, res, next) => (req.user ? importJson(req, res, next) : next()));
 // импорт проекта целиком (с вложениями в base64) и миграция из других TMS
-const projectJson = express.json({ limit: `${Number(process.env.IMPORT_MAX_MB || 200)}mb` });
+const projectJson = express.json({ limit: projectio.IMPORT_MAX_BYTES });
 app.use("/api/projects-import", (req, res, next) => (req.user ? projectJson(req, res, next) : next()));
-app.use(express.json({ limit: "200kb" }));
+const json = express.json({ limit: "200kb" });
+app.use((req, res, next) => attachmentUpload(req) ? next() : json(req, res, next));
 
 // Защита от CSRF: изменяющие запросы принимаются только как JSON.
 // Загрузка файла идёт «сырым» телом, поэтому требует заголовок X-Upload: чужой сайт не может
 // прислать его без CORS-разрешения, которого сервер не даёт.
 app.use("/api", (req, res, next) => {
   if (["POST", "PATCH", "PUT", "DELETE"].includes(req.method) && !req.is("application/json")) {
-    const upload = req.method === "POST" && req.path.endsWith("/attachments") && req.get("x-upload") === "1";
-    if (!upload) return res.status(415).json({ error: "Ожидается Content-Type: application/json" });
+    if (!attachmentUpload(req)) return res.status(415).json({ error: "Ожидается Content-Type: application/json" });
   }
   next();
 });
@@ -175,7 +173,6 @@ app.get("/api/auth/me", wrap(async (req, res) => {
     const { rows } = await pool.query("SELECT auth_provider FROM users WHERE id=$1", [req.user.id]);
     const user = me({ ...req.user, auth_provider: rows[0]?.auth_provider });
     user.twoFactor = !!req.user.totpEnabled;
-    user.eula = await eula.pendingFor(req.user);
     return res.json({ user });
   }
   res.json({ user: null, setup: await auth.needsSetup(), registration: REGISTRATION, providers: { local: true, ldap: false, oidc: null, kerberos: null }, passwordPolicy: security.policyText(), privacyPolicyUrl: PRIVACY_URL || null });
@@ -214,7 +211,8 @@ app.post("/api/auth/register", wrap(async (req, res) => {
   const pending = await pendingOf(rows[0].id);
   audit.log(req, "auth.register", { actor: { id: rows[0].id, login }, project: null, target: login, details: { role: rows[0].role } });
   broadcast("users");
-  res.status(201).json({ user: { login, name, role: rows[0].role, pending } });
+  const user = me({ login, name, role: rows[0].role, pending });
+  res.status(201).json({ user });
 }));
 
 app.post("/api/auth/login", wrap(async (req, res) => {
@@ -257,7 +255,8 @@ app.post("/api/auth/login", wrap(async (req, res) => {
   await pool.query("UPDATE users SET last_login_at=now() WHERE id=$1", [u.id]);
   await auth.createSession(res, req, u.id);
   audit.log(req, "auth.login", { actor: u, project: null, target: u.login, details: { provider: u.auth_provider || "local" } });
-  res.json({ user: me({ ...u, pending: await pendingOf(u.id), twoFactor: !!totp }) });
+  const user = me({ ...u, pending: await pendingOf(u.id), twoFactor: !!totp });
+  res.json({ user });
 }));
 
 // двухфакторная аутентификация и активные сессии (server/account.js)
@@ -354,7 +353,6 @@ app.use("/api/admin", auth.requireUser, access.requireAdmin, require("./backup")
 
 // Встроенная справка (docs/, README, CHANGELOG) — для всех вошедших
 app.use("/api/help", auth.requireUser, require("./help").router);
-app.use("/api", eula.router);
 
 // Лицензия (админ): условия действующего ключа, ввод нового ключа, возврат к бесплатной редакции
 app.get("/api/admin/license", auth.requireUser, access.requireAdmin, wrap(async (_req, res) => {
@@ -418,6 +416,9 @@ app.use((err, req, res, _next) => {
   if (err.type === "entity.parse.failed") return res.status(400).json({ error: "Некорректный JSON" });
   // ошибки с понятным пользователю кодом (модель недоступна, сервер перегружен, тело слишком большое) — не ошибки сервера
   if (err.code === "23514" && err.constraint === "community_active_seats") return res.status(409).json({ error: seats.LIMIT_ERROR });
+  if (err.code === "23514" && err.constraint === "community_active_projects") {
+    return res.status(409).json({ error: "Доступно до 2 активных проектов Community. Переместите проект в корзину, чтобы освободить место." });
+  }
   if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
   if (err.expose && err.status) return res.status(err.status).json({ error: err.status === 413 ? "Слишком большой запрос" : "Некорректный запрос" });
   log.error("server", err.message, { reqId: req.id, method: req.method, path: req.originalUrl.split("?")[0], user: req.user?.login || null, err: err.code || err.name, stack: err.stack });
@@ -442,6 +443,8 @@ app.use((err, req, res, _next) => {
   // уборка раз в час: корзина, журнал аудита, журнал вебхуков, выполненные фоновые задачи
   jobs.define("housekeeping", () => Promise.all([trash.purgeExpired(), audit.purge(), require("./personal").purgeIps(), webhooks.trimDeliveries(), jobs.cleanup()]), { maxAttempts: 1, title: "Уборка устаревших данных" });
   jobs.every("housekeeping", 60 * 60 * 1000);
+  jobs.define("autoruns.expire", autotests.expireInactive, { maxAttempts: 2, title: "Проверка незавершённых прогонов CI" });
+  jobs.every("autoruns.expire", 5 * 60 * 1000);
   require("./backup").startSchedule();
   trackers.startSync();
   jobs.start();

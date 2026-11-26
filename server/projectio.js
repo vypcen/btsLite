@@ -7,6 +7,7 @@ const express = require("express");
 const casemodel = require("./casemodel");
 const datasets = require("./datasets");
 const templatesMod = require("./templates");
+const { remapPlanFilter } = require("./plans");
 const { pool, tx } = require("./db");
 const { broadcast } = require("./live");
 const attachments = require("./attachments");
@@ -17,6 +18,14 @@ const { wrap, str, num, HttpError } = require("./util");
 const FORMAT = "testball-project";
 const KEY_RE = /^[A-Z]{2,6}$/;
 const MAX_FILES_BYTES = Number(process.env.EXPORT_MAX_FILES_MB || 200) * 1024 * 1024;
+const IMPORT_MAX_BYTES = Math.floor(Number(process.env.IMPORT_MAX_MB || 200) * 1024 * 1024);
+// Место для обёртки запроса импорта, включая имя проекта и ключ.
+const IMPORT_ENVELOPE_BYTES = 4096;
+function checkImportSize(bytes) {
+  if (bytes + IMPORT_ENVELOPE_BYTES > IMPORT_MAX_BYTES) {
+    throw new HttpError(413, `Экспорт не поместится в лимит импорта ${IMPORT_MAX_BYTES / 1024 / 1024} МБ. Увеличьте IMPORT_MAX_MB или выгрузите проект без вложений.`);
+  }
+}
 const PRIORITIES = ["critical", "high", "medium", "low"];
 const iso = (d) => (d ? d.toISOString() : null);
 
@@ -35,7 +44,8 @@ async function exportProject(key, withFiles) {
     q("SELECT kind, name, data, is_default FROM templates WHERE project_key=$1 ORDER BY id"),
     q("SELECT id, num, title, step_list FROM shared_steps WHERE project_key=$1 ORDER BY num"),
     q("SELECT id, num, name, columns, rows FROM datasets WHERE project_key=$1 ORDER BY num"),
-    q(`SELECT r.*, p.num AS parent_num FROM releases r LEFT JOIN releases p ON p.id=r.parent_id WHERE r.project_key=$1 ORDER BY r.num`),
+    q(`SELECT r.*, p.num AS parent_num, to_char(r.starts_on, 'YYYY-MM-DD') AS starts, to_char(r.due_on, 'YYYY-MM-DD') AS due
+       FROM releases r LEFT JOIN releases p ON p.id=r.parent_id WHERE r.project_key=$1 ORDER BY r.num`),
     q(`SELECT 'runs' AS kind, t.num, v.num AS rel FROM test_runs t JOIN releases v ON v.id=t.release_id WHERE t.project_key=$1
        UNION ALL SELECT 'plans', p.num, v.num FROM test_plans p JOIN releases v ON v.id=p.release_id WHERE p.project_key=$1
        UNION ALL SELECT 'bugs', b.num, v.num FROM bugs b JOIN releases v ON v.id=b.release_id WHERE b.project_key=$1`),
@@ -80,12 +90,19 @@ async function exportProject(key, withFiles) {
 
   const fileMap = {};
   let total = 0;
+  let encodedBytes = 0;
   for (const a of files) {
     const f = { name: a.filename, mime: a.mime, size: a.size, uploadedBy: a.ub, created: iso(a.created_at), step: a.step_index ?? undefined };
     if (withFiles) {
       total += a.size;
       if (total > MAX_FILES_BYTES) throw new HttpError(413, `Вложения больше ${MAX_FILES_BYTES / 1024 / 1024} МБ — выгрузите проект без файлов или увеличьте EXPORT_MAX_FILES_MB`);
-      f.data = (await attachments.readFile(a.id).catch(() => Buffer.alloc(0))).toString("base64");
+      encodedBytes += 4 * Math.ceil(a.size / 3);
+      checkImportSize(encodedBytes);
+      const content = await attachments.readFile(a.id).catch(() => null);
+      if (!content?.length || content.length !== a.size) {
+        throw new HttpError(409, `Экспорт с вложениями невозможен: файл «${a.filename}» недоступен или повреждён`);
+      }
+      f.data = content.toString("base64");
     }
     fileMap[a.id] = f;
   }
@@ -115,7 +132,7 @@ async function exportProject(key, withFiles) {
     // релизы и спринты; связи — номерами прогонов, планов и багов
     releases: releaseList.map((r) => ({
       num: r.num, parent: r.parent_num ?? null, name: r.name, description: r.description, status: r.status,
-      starts: r.starts_on ? iso(r.starts_on).slice(0, 10) : null, due: r.due_on ? iso(r.due_on).slice(0, 10) : null,
+      starts: r.starts, due: r.due,
       runs: releaseLinks.filter((x) => x.kind === "runs" && x.rel === r.num).map((x) => x.num),
       plans: releaseLinks.filter((x) => x.kind === "plans" && x.rel === r.num).map((x) => x.num),
       bugs: releaseLinks.filter((x) => x.kind === "bugs" && x.rel === r.num).map((x) => x.num),
@@ -153,7 +170,7 @@ async function exportProject(key, withFiles) {
     })),
     autoruns: autoruns.map((r) => ({
       num: r.num, title: r.title, build: r.build, env: r.environment, branch: r.branch, scope: r.scope, url: r.app_url, state: r.state,
-      params: r.params, ciUrl: r.ci_url, createdBy: r.cb, created: iso(r.created_at), finished: iso(r.finished_at),
+      params: r.params, ciUrl: r.ci_url, failureReason: r.failure_reason, lastActivity: iso(r.last_activity_at), createdBy: r.cb, created: iso(r.created_at), finished: iso(r.finished_at),
       results: autoresults.filter((x) => x.run_num === r.num).map((x) => ({
         test: autotests.find((t) => t.id === x.test_id)?.test_key, status: x.status, durationMs: x.duration_ms, message: x.message,
         details: x.details, steps: x.steps, retries: x.retries, flaky: x.flaky, created: iso(x.created_at), attachments: filesOf("auto_result_id", x.id),
@@ -327,7 +344,7 @@ async function importProject(data, { key, name }, user) {
           `INSERT INTO test_plans(project_key, num, title, description, mode, filter, locked, locked_by, locked_at, created_by, created_at)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
           [key, num(p.num), str(p.title, 300) || "План", str(p.description, 5000), oneOf(p.mode, ["static", "dynamic"], "static"),
-            p.filter && typeof p.filter === "object" ? p.filter : {}, p.locked === true, u(p.lockedBy), p.locked ? date(p.lockedAt) : null, user.id, date(p.created)]
+            remapPlanFilter(p, folderId), p.locked === true, u(p.lockedBy), p.locked ? date(p.lockedAt) : null, user.id, date(p.created)]
         );
         planId.set(num(p.num), rows[0].id);
         for (const x of arr(p.cases)) {
@@ -431,11 +448,11 @@ async function importProject(data, { key, name }, user) {
       }
       for (const r of autoruns) {
         const { rows } = await db.query(
-          `INSERT INTO auto_runs(project_key, num, title, build, environment, branch, scope, app_url, state, params, ci_url, created_by, created_at, finished_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+          `INSERT INTO auto_runs(project_key, num, title, build, environment, branch, scope, app_url, state, params, ci_url, created_by, created_at, finished_at, failure_reason, last_activity_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
           [key, num(r.num), str(r.title, 300) || "Запуск", str(r.build, 200), str(r.env, 500), str(r.branch, 200), str(r.scope, 500), str(r.url, 500),
             oneOf(r.state, ["queued", "running", "finished", "failed"], "finished"), r.params && typeof r.params === "object" ? r.params : {}, str(r.ciUrl, 1000),
-            u(r.createdBy), date(r.created), r.finished ? date(r.finished) : null]
+            u(r.createdBy), date(r.created), r.finished ? date(r.finished) : null, str(r.failureReason, 300), date(r.lastActivity)]
         );
         for (const x of arr(r.results)) {
           const tid = testId.get(x.test);
@@ -611,7 +628,16 @@ const CONVERTERS = { testrail: fromTestRail, testlink: fromTestLink, qase: fromQ
 // Источник: {"source": "testball", "data": {...}} или {"source": "testrail"|"testlink"|"qase", "text": "содержимое файла"}
 function readSource(body) {
   const source = str(body.source, 20) || "testball";
-  if (source === "testball") return body.data;
+  if (source === "testball") {
+    for (const file of Object.values(body.data?.attachments || {})) {
+      if (typeof file?.data !== "string") continue;
+      const bytes = Buffer.from(file.data, "base64").length;
+      if (!bytes || (Number(file.size) > 0 && bytes !== Number(file.size))) {
+        throw new HttpError(400, `Архив содержит повреждённое вложение «${str(file.name, 255)}». Повторите экспорт с вложениями.`);
+      }
+    }
+    return body.data;
+  }
   const conv = CONVERTERS[source];
   if (!conv) throw new HttpError(400, `Источник: testball, ${Object.keys(CONVERTERS).join(", ")}`);
   if (typeof body.text !== "string" || !body.text.trim()) throw new HttpError(400, "Передайте содержимое файла в поле text");
@@ -626,9 +652,11 @@ function readSource(body) {
 const projectRouter = express.Router({ mergeParams: true });
 projectRouter.get("/export", wrap(async (req, res) => {
   const data = await exportProject(req.params.key, req.query.files === "1");
+  const json = JSON.stringify(data);
+  checkImportSize(Buffer.byteLength(json));
   const stamp = new Date().toISOString().slice(0, 10);
   res.set("Content-Disposition", `attachment; filename="${req.params.key}-${stamp}.testball.json"`);
-  res.json(data);
+  res.type("application/json").send(json);
 }));
 
 // /api/projects-import — создать проект из файла (экспорт BlackCat Testing или другой TMS). dryRun — только сводка
@@ -644,4 +672,4 @@ importRouter.post("/", wrap(async (req, res) => {
   res.status(201).json({ id: key, summary: out, warnings });
 }));
 
-module.exports = { projectRouter, importRouter, exportProject, importProject, summarize, fromTestRail, fromTestLink, fromQase };
+module.exports = { IMPORT_MAX_BYTES, projectRouter, importRouter, exportProject, importProject, summarize, fromTestRail, fromTestLink, fromQase };

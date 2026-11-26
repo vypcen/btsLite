@@ -13,7 +13,6 @@ on:
       - 'package*.json'
       - 'docs/**'
       - 'README.md'
-      - 'LICENSE-EULA.md'
 
 permissions:
   contents: read

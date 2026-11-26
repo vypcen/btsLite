@@ -6,7 +6,6 @@ import { useStore } from "./store";
 import { Avatar, useRoles } from "./ui";
 import { Login } from "./views/Login";
 import { PendingScreen, SecurityModal } from "./views/Security";
-import { EulaScreen } from "./views/Eula";
 import { ProjectPage } from "./views/ProjectPage";
 import { Projects } from "./views/Projects";
 import { Users } from "./views/Users";
@@ -33,7 +32,6 @@ export function App() {
   // сменить пароль или включить 2FA — до этого сервер не отдаёт данные
   if (me.pending) return <PendingScreen />;
   // клиентская сборка: соглашение принимает администратор до начала работы
-  if (me.eula) return <EulaScreen />;
 
   const [section, key, tab, id] = route;
   const project = section === "p" && data ? data.projects.find((p) => p.id === key) : undefined;

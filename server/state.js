@@ -141,7 +141,7 @@ const projectQueries = {
                 ORDER BY a.created_at`,
   // запуски автотестов — только сводка; сами результаты отдаёт GET /api/projects/:key/autoruns/:num
   autoruns: `SELECT r.project_key, r.num, r.title, r.build, r.environment, r.branch, r.scope, r.app_url, r.state, u.login AS created_by, r.created_at, r.finished_at,
-                  r.params, r.ci_url, count(ar.id) FILTER (WHERE ar.flaky)::int AS flaky,
+                  r.params, r.ci_url, r.failure_reason, count(ar.id) FILTER (WHERE ar.flaky)::int AS flaky,
                   count(ar.id) FILTER (WHERE ar.status='passed')::int AS passed, count(ar.id) FILTER (WHERE ar.status='failed')::int AS failed,
                   count(ar.id) FILTER (WHERE ar.status='broken')::int AS broken, count(ar.id) FILTER (WHERE ar.status='skipped')::int AS skipped,
                   COALESCE(sum(ar.duration_ms), 0)::bigint AS duration
@@ -188,7 +188,7 @@ const projectMappers = {
   autoruns: (r) => ({
     id: `${r.project_key}-A${r.num}`, pid: r.project_key, num: r.num, title: r.title, build: r.build, env: r.environment, branch: r.branch,
     scope: r.scope, url: r.app_url, state: r.state, createdBy: r.created_by, created: ms(r.created_at), finished: ms(r.finished_at), durationMs: Number(r.duration),
-    counts: { passed: r.passed, failed: r.failed, broken: r.broken, skipped: r.skipped }, flaky: r.flaky, params: r.params, ciUrl: r.ci_url,
+    counts: { passed: r.passed, failed: r.failed, broken: r.broken, skipped: r.skipped }, flaky: r.flaky, params: r.params, ciUrl: r.ci_url, failureReason: r.failure_reason,
   }),
   comments: (c) => ({
     id: c.id, pid: c.project_key, bugNum: c.bug_num, caseNum: c.case_num, author: c.author, text: c.body,

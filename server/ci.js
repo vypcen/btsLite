@@ -185,7 +185,7 @@ router.post("/ci-jobs/:id/trigger", wrap(async (req, res) => {
     await pool.query("UPDATE auto_runs SET ci_url=$1 WHERE project_key=$2 AND num=$3", [ciUrl.slice(0, 1000), key, n]);
   } catch (e) {
     // запуск не состоялся — помечаем его, чтобы в истории было видно попытку
-    await pool.query("UPDATE auto_runs SET state='failed', finished_at=now() WHERE project_key=$1 AND num=$2", [key, n]);
+    await pool.query("UPDATE auto_runs SET state='failed', finished_at=now(), failure_reason='CI не подтвердил запуск задания' WHERE project_key=$1 AND num=$2 AND state='queued'", [key, n]);
     broadcast("autoruns");
     throw e;
   }

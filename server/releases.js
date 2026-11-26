@@ -11,13 +11,13 @@ const router = express.Router({ mergeParams: true });
 const STATUSES = ["planned", "active", "released", "cancelled"];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-const day = (d) => (d ? (d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10)) : null);
+const calendarDates = "to_char(r.starts_on, 'YYYY-MM-DD') AS starts, to_char(r.due_on, 'YYYY-MM-DD') AS due";
 const toRelease = (r) => ({
   id: r.id, num: r.num, ref: `${r.project_key}-V${r.num}`, name: r.name, description: r.description, status: r.status, parent: r.parent_num ?? null,
-  starts: day(r.starts_on), due: day(r.due_on), released: r.released_at ? r.released_at.getTime() : null,
+  starts: r.starts, due: r.due, released: r.released_at ? r.released_at.getTime() : null,
   createdBy: r.created_login || null, created: r.created_at.getTime(),
 });
-const baseSql = `SELECT r.*, p.num AS parent_num, u.login AS created_login FROM releases r
+const baseSql = `SELECT r.*, p.num AS parent_num, u.login AS created_login, ${calendarDates} FROM releases r
   LEFT JOIN releases p ON p.id=r.parent_id LEFT JOIN users u ON u.id=r.created_by`;
 
 router.get("/releases", wrap(async (req, res) => {
@@ -36,15 +36,19 @@ async function readRelease(body, prev = {}) {
     name: body.name === undefined ? prev.name : str(body.name, 200),
     description: body.description === undefined ? prev.description ?? "" : str(body.description, 5000),
     status: body.status === undefined ? prev.status ?? "planned" : str(body.status, 20),
-    starts: body.starts === undefined ? day(prev.starts_on) : body.starts || null,
-    due: body.due === undefined ? day(prev.due_on) : body.due || null,
+    starts: body.starts === undefined ? prev.starts ?? null : body.starts || null,
+    due: body.due === undefined ? prev.due ?? null : body.due || null,
     parentId: prev.parent_id ?? null,
   };
   if (!r.name) return { error: "Укажите название релиза" };
   const long = tooLong(body.name, 200);
   if (long) return { error: long };
   if (!STATUSES.includes(r.status)) return { error: `Статус: ${STATUSES.join(", ")}` };
-  for (const d of [r.starts, r.due]) if (d !== null && (!DATE.test(d) || Number.isNaN(Date.parse(d)))) return { error: "Даты — в формате ГГГГ-ММ-ДД" };
+  for (const d of [r.starts, r.due]) {
+    if (d !== null && (typeof d !== "string" || !DATE.test(d) || Number.isNaN(Date.parse(d)) || new Date(d).toISOString().slice(0, 10) !== d)) {
+      return { error: "Даты — в формате ГГГГ-ММ-ДД" };
+    }
+  }
   if (r.starts && r.due && r.starts > r.due) return { error: "Начало позже срока" };
   if (body.parent != null && num(body.parent) !== (await pool.query("SELECT num FROM releases WHERE id=$1", [prev.parent_id ?? null])).rows[0]?.num) {
     return { error: "Создание и перенос спринтов доступны в Enterprise" };
@@ -78,7 +82,7 @@ router.post("/releases", wrap(async (req, res) => {
 }));
 
 router.patch("/releases/:num(\\d+)", wrap(async (req, res) => {
-  const prev = (await pool.query("SELECT * FROM releases WHERE project_key=$1 AND num=$2", [req.params.key, num(req.params.num)])).rows[0];
+  const prev = (await pool.query(`SELECT r.*, ${calendarDates} FROM releases r WHERE project_key=$1 AND num=$2`, [req.params.key, num(req.params.num)])).rows[0];
   if (!prev) return res.status(404).json({ error: "Релиз не найден" });
   const { r, error } = await readRelease(req.body, prev);
   if (error) return res.status(400).json({ error });

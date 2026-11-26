@@ -504,6 +504,7 @@ test("шаблоны кейсов и багов: сохранение, по ум
   r = await u.admin.post("/api/projects-import", { source: "testball", data: exp.data, key: "TPL" });
   assert.equal(r.status, 201, JSON.stringify(r.data));
   assert.equal((await u.admin.get("/api/projects/TPL/templates")).data.templates.length, 3);
+  assert.equal((await u.admin.del("/api/projects/TPL", { confirm: "TPL" })).status, 200);
   assert.equal((await u.tester.del(`/api/projects/LK/templates/${t2}`)).status, 200);
 });
 
@@ -600,6 +601,7 @@ test("живые события: несут проект и не приходя�
   await pump;
   assert.ok(got.some((e) => e.type === "cases" && e.pid === "LK"));
   assert.ok(!got.some((e) => e.pid === "XX"), "о чужом проекте сигналов нет");
+  assert.equal((await u.admin.del("/api/projects/XX", { confirm: "XX" })).status, 200);
 });
 
 test("списки: постраничная выдача, фильтры, поиск с морфологией и по ID", async () => {
@@ -693,6 +695,7 @@ test("проект: удаляет только админ с подтвержд
   assert.ok(list.data.items.some((p) => p.key === "DEL"));
   assert.equal((await u.admin.post("/api/admin/projects/DEL/restore")).status, 200);
   assert.equal((await u.tester.get("/api/projects/DEL/state")).status, 200);
+  assert.equal((await u.admin.del("/api/projects/DEL", { confirm: "DEL" })).status, 200);
   await u.admin.put("/api/admin/users/tester/projects", { projects: ["LK"] });
 });
 

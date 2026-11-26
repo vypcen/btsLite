@@ -23,7 +23,7 @@ if [ "$1" = configure ]; then
     key=$("$node" -p 'require("node:crypto").randomBytes(32).toString("hex")')
     code=$("$node" -p 'require("node:crypto").randomBytes(12).toString("hex")')
     {
-      printf '%s\n' 'NODE_ENV=production' 'PORT=3002' 'LISTEN_HOST=127.0.0.1' 'REGISTRATION=closed' 'EULA_REQUIRED=true'
+      printf '%s\n' 'NODE_ENV=production' 'PORT=3002' 'LISTEN_HOST=127.0.0.1' 'REGISTRATION=closed'
       printf '%s\n' 'DATABASE_URL=postgresql://blackcat-community@/postgres?host=%2Frun%2Fblackcat-community-db'
       printf '%s\n' "UPLOAD_DIR=$data/uploads" "BACKUP_DIR=$data/backups" "BACKUP_PG_BIN=$pg" "APP_SECRET=$key" "SETUP_CODE=$code"
     } > "$temporary"

@@ -178,6 +178,7 @@ function RunRow({ r }: { r: AutoRun }) {
           {c.passed}/{total(c)}
           {bad ? <span style={{ color: "var(--crit)" }}> · упало {bad}</span> : null}
           {r.state !== "finished" && <span style={{ color: r.state === "failed" ? "var(--crit)" : "var(--info)" }}> · {AUTO_RUN_STATES[r.state].label.toLowerCase()}</span>}
+          {r.failureReason && <div className="small" style={{ color: "var(--crit)" }}>{r.failureReason}</div>}
           {r.flaky > 0 && <span style={{ color: "var(--warn)" }}> · с повтора {r.flaky}</span>}
         </div>
       </td>

@@ -936,7 +936,7 @@ curl -s "${H[@]}" -X PATCH "$URL/api/projects/$KEY/autoruns/$NUM" -d '{"state":"
 | `PATCH / DELETE /api/projects/:key/ci-jobs/:id` | Изменить / удалить |
 | `POST /api/projects/:key/ci-jobs/:id/trigger` | `{params: {NAME: значение}, ref?, title?}` → `{num, id}`. Создаёт запуск `queued`; в CI уходят параметры и `TESTBALL_RUN`, `TESTBALL_PROJECT`, `TESTBALL_URL`. Если CI отказал — запуск `failed`, ответ `502` |
 
-Состояния запуска автотестов: `queued`, `running`, `finished`, `failed`. Репортер с `TESTBALL_RUN` делает `PATCH /autoruns/:num {"state": "running", ...}` вместо создания запуска.
+Состояния запуска автотестов: `queued`, `running`, `finished`, `failed`. Причину остановки можно получить в `failureReason` в списке запусков проекта. Репортер с `TESTBALL_RUN` делает `PATCH /autoruns/:num {"state": "running", ...}` вместо создания запуска.
 
 ## Нестабильные автотесты
 

@@ -114,7 +114,9 @@ async function storeResults(key, runNum, parsed) {
   const byKey = new Map(parsed.map((t) => [t.key, t]));
   const uniq = [...byKey.values()];
   return tx(async (db) => {
-    const run = await findRun(db, key, runNum);
+    const { rows: [run] } = await db.query(
+      "UPDATE auto_runs SET last_activity_at=now() WHERE project_key=$1 AND num=$2 RETURNING id", [key, runNum]
+    );
     if (!run) return null;
     await db.query(
       `INSERT INTO auto_tests(project_key, test_key, suite, name, file)
@@ -216,10 +218,11 @@ router.patch("/autoruns/:num", wrap(async (req, res) => {
   const state = req.body.state === undefined ? rows[0].state : req.body.state;
   if (!["queued", "running", "finished", "failed"].includes(state)) return res.status(400).json({ error: "Неизвестное состояние запуска" });
   await pool.query(
-    `UPDATE auto_runs SET title=$1, build=$2, environment=$3, branch=$4, scope=$5, app_url=$6, state=$7,
+    `UPDATE auto_runs SET title=$1, build=$2, environment=$3, branch=$4, scope=$5, app_url=$6, state=$7, last_activity_at=now(),
+       failure_reason = CASE WHEN $7='failed' THEN COALESCE($10, failure_reason) ELSE '' END,
        finished_at = CASE WHEN $7 IN ('finished','failed') THEN COALESCE(finished_at, now()) ELSE NULL END
      WHERE project_key=$8 AND num=$9`,
-    [r.title, r.build, r.env, r.branch, r.scope, r.url, state, req.params.key, n]
+    [r.title, r.build, r.env, r.branch, r.scope, r.url, state, req.params.key, n, req.body.failureReason === undefined ? null : str(req.body.failureReason, 300)]
   );
   broadcast("autoruns");
   if (state === "finished" && rows[0].state !== "finished") {
@@ -413,4 +416,20 @@ tokenRouter.delete("/:id", wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-module.exports = { projectRouter: router, tokenRouter };
+async function expireInactive() {
+  const minutes = (value, fallback) => Number(value) > 0 && Number.isFinite(Number(value)) ? Number(value) : fallback;
+  const queued = minutes(process.env.CI_QUEUE_TIMEOUT_MINUTES, 60);
+  const running = minutes(process.env.CI_IDLE_TIMEOUT_MINUTES, 360);
+  const { rowCount } = await pool.query(
+    `UPDATE auto_runs SET state='failed', finished_at=now(),
+       failure_reason=CASE state WHEN 'queued' THEN 'CI не начал прогон за отведённое время'
+         ELSE 'CI перестал передавать результаты' END
+     WHERE (state='queued' AND last_activity_at < now() - make_interval(mins => $1::int))
+        OR (state='running' AND last_activity_at < now() - make_interval(mins => $2::int))`,
+    [Math.max(1, Math.min(525600, Math.round(queued))), Math.max(1, Math.min(525600, Math.round(running)))]
+  );
+  if (rowCount) broadcast("autoruns");
+  return rowCount;
+}
+
+module.exports = { projectRouter: router, tokenRouter, expireInactive };

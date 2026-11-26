@@ -680,3 +680,21 @@ test("тест-план: ход выполнения по прогонам пл�
   await page.goto("/#/p/LK/plans");
   await expect(page.locator("tr", { hasText: "E2E план хода" })).toContainText("50%");
 });
+
+test("первый вход открывает проекты сразу после регистрации", async ({ page }) => {
+  const { startServer, SETUP_CODE } = require("../test/helpers");
+  const srv = await startServer({ EULA_REQUIRED: "true", REGISTRATION: "closed" });
+  try {
+    await page.goto(srv.base);
+    await expect(page.getByRole("heading", { name: "Первый администратор" })).toBeVisible();
+    await page.getByLabel("Код установки").fill(SETUP_CODE);
+    await page.getByLabel("Логин", { exact: true }).fill("operator");
+    await page.getByLabel("Имя", { exact: true }).fill("Первый администратор");
+    await page.getByLabel("Пароль", { exact: true }).fill("Qx8-Lp7bh!64");
+    await page.getByLabel("Повторите пароль").fill("Qx8-Lp7bh!64");
+    await page.getByRole("button", { name: "Зарегистрироваться" }).click();
+    await expect(page.getByRole("heading", { name: "Проекты", exact: true })).toBeVisible();
+  } finally {
+    await srv.stop();
+  }
+});

@@ -37,7 +37,6 @@ const COPY = [
   "README.md",
   "CHANGELOG.md",
   ".env.example",
-  "LICENSE-EULA.md",
 ];
 
 const OBFUSCATE = {
@@ -99,11 +98,11 @@ async function main() {
     version: pkg.version,
     private: true,
     description: pkg.description,
-    license: "SEE LICENSE IN LICENSE-EULA.md",
     main: "server/index.js",
     scripts: { start: "node server/index.js", migrate: "node server/migrate.js", import: "node scripts/import.js" },
     engines: pkg.engines,
     dependencies: pkg.dependencies,
+    overrides: pkg.overrides,
   };
   fs.writeFileSync(path.join(OUT, "package.json"), JSON.stringify(dist, null, 2) + "\n");
   fs.copyFileSync(path.join(ROOT, "package-lock.json"), path.join(OUT, "package-lock.json"));

@@ -26,8 +26,9 @@ function cleanName(raw) {
 }
 
 async function save(req, res, owner) {
+  if (req.get("x-upload") !== "1") return res.status(400).json({ error: "Для загрузки файла нужен заголовок X-Upload" });
   const size = Number(req.get("content-length"));
-  if (!size) return res.status(400).json({ error: "Пустой файл" });
+  if (!Number.isSafeInteger(size) || size <= 0) return res.status(400).json({ error: "Пустой файл" });
   if (size > MAX_BYTES) return res.status(413).json({ error: `Файл больше ${MAX_BYTES / 1024 / 1024} МБ` });
   const id = crypto.randomUUID();
   const tmp = path.join(storage.tmpDir, `${id}.part`);
@@ -40,6 +41,10 @@ async function save(req, res, owner) {
   });
   try {
     await pipeline(req, limit, fs.createWriteStream(tmp));
+    if (bytes !== size) {
+      await fs.promises.unlink(tmp);
+      return res.status(400).json({ error: "Получен неполный файл" });
+    }
     // сначала файл занимает своё место, потом появляется запись: запись без файла невозможна,
     // а файл без записи уберёт sweep()
     await storage.put(id, tmp);

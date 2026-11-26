@@ -34,7 +34,6 @@ export interface User {
   provider?: AuthProvider;
   version?: string;
   /** клиентская сборка: "accept" — администратору принять соглашение, "wait" — остальным ждать */
-  eula?: "accept" | "wait" | null;
   /** пробная версия: для кого и сколько осталось */
   // что нужно сделать до начала работы: сменить пароль или включить 2FA
   pending?: "password" | "2fa" | null;
@@ -264,6 +263,7 @@ export interface AutoRun {
   url: string; // адрес тестируемого приложения
   // queued — запущен из BlackCat Testing в CI и ждёт начала; failed — CI не принял запуск
   state: "queued" | "running" | "finished" | "failed";
+  failureReason?: string;
   createdBy: string | null;
   created: number;
   finished: number | null;
@@ -368,6 +368,7 @@ export interface State {
 
 // ---------- тест-планы (GET /api/projects/:key/plans) ----------
 export interface PlanFilter {
+  emptyFolders?: boolean;
   folders: number[];
   root: boolean;
   priorities: Priority[];

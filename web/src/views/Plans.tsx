@@ -84,13 +84,14 @@ function FilterEditor({ pid, filter, onChange }: { pid: string; filter: PlanFilt
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div className="field">
         <label>Папки (вместе с подпапками). Пусто — все</label>
+        {filter.emptyFolders && <p className="muted small">Выбранные папки удалены. Выберите папки заново или <button type="button" className="link" onClick={() => onChange({ ...filter, emptyFolders: false })}>включите все папки</button>.</p>}
         <div className="history" style={{ maxHeight: 160, overflow: "auto" }}>
           <label style={{ display: "flex", gap: 8 }}>
-            <input type="checkbox" checked={filter.root} onChange={() => onChange({ ...filter, root: !filter.root })} /> <span className="muted">Без папки</span>
+            <input type="checkbox" checked={filter.root} onChange={() => onChange({ ...filter, emptyFolders: false, root: !filter.root })} /> <span className="muted">Без папки</span>
           </label>
           {tree.map(({ f, depth }) => (
             <label key={f.id} style={{ display: "flex", gap: 8, paddingLeft: depth * 16 }}>
-              <input type="checkbox" checked={filter.folders.includes(f.id)} onChange={() => onChange({ ...filter, folders: toggleIn(filter.folders, f.id) })} /> {f.name}
+              <input type="checkbox" checked={filter.folders.includes(f.id)} onChange={() => onChange({ ...filter, emptyFolders: false, folders: toggleIn(filter.folders, f.id) })} /> {f.name}
             </label>
           ))}
         </div>

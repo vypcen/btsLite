@@ -434,13 +434,11 @@ section>h3{margin:18px 0 8px}
 .cov-matrix td.cov-cell{text-align:center;padding:3px 2px;min-width:26px}
 .cov-matrix .cov-mark{display:inline-flex;width:20px;height:20px;align-items:center;justify-content:center;border-radius:4px;font-size:12px;font-weight:700;cursor:default}
 .cov-matrix .cov-sticky{position:sticky;left:0;background:var(--surface);z-index:1;min-width:260px;max-width:420px}
-/* пробная версия и лицензионное соглашение (клиентская сборка) */
+/* Полоса пробной версии */
 .trial-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 16px;background:#18201d;color:#e4ebe8;font-size:13px}
 .trial-bar .mark-sm{display:inline-flex;width:20px;height:20px;border-radius:4px;background:var(--accent);color:#fff;font-family:var(--mono);font-size:9px;align-items:center;justify-content:center}
 .trial-bar b{color:#4fb596}
 .trial-bar-hint{margin-left:auto;color:#b3c0ba}
-.eula-text{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:var(--radius);padding:4px 18px;background:var(--surface-2,var(--bg));font-size:14px;line-height:1.55}
-.eula-text h1{font-size:18px}.eula-text h2{font-size:16px;margin-top:18px}
 
 /* Список кейсов: компактный вид и выбор колонок */
 .view-bar{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin:-4px 0 8px}

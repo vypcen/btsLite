@@ -60,6 +60,7 @@ class TestballReporter {
     const env = process.env;
     this.url = (options.url || env.TESTBALL_URL || "").replace(/\/+$/, "");
     this.token = options.token || env.TESTBALL_TOKEN || "";
+    this.deliveryFailed = false;
     this.project = options.project || env.TESTBALL_PROJECT || "";
     this.opts = {
       title: options.title || env.TESTBALL_TITLE,
@@ -69,6 +70,7 @@ class TestballReporter {
       appUrl: options.appUrl ?? env.TESTBALL_APP_URL,
       runNum: /^\d+$/.test(String(options.run ?? env.TESTBALL_RUN ?? "")) ? Number(options.run ?? env.TESTBALL_RUN) : null,
     };
+    this.requireUpload = options.requireUpload ?? (env.TESTBALL_REQUIRE_UPLOAD === "1" || this.opts.runNum > 0);
     // `--list` только показывает тесты, не запуская их: такой «запуск» в BlackCat Testing не нужен
     this.enabled = Boolean(this.url && this.token && this.project) && !process.argv.includes("--list");
     this.queue = []; // результаты, ещё не отправленные на сервер
@@ -100,7 +102,10 @@ class TestballReporter {
 
   // Ставит действие в общую очередь. Ошибка отправки не роняет тесты: пишем предупреждение и идём дальше
   enqueue(fn) {
-    this.chain = this.chain.then(fn).catch((e) => this.log(`не удалось отправить данные: ${e.cause?.message || e.message}`));
+    this.chain = this.chain.then(fn).catch((e) => {
+      this.deliveryFailed = true;
+      this.log(`не удалось отправить данные: ${e.cause?.message || e.message}`);
+    });
     return this.chain;
   }
 
@@ -235,12 +240,17 @@ class TestballReporter {
       });
       this.stats.files++;
     } catch (e) {
+      this.deliveryFailed = true;
       this.log(`${name}: ${e.message}`);
     }
   }
 
   async onEnd() {
-    if (!this.enabled) return;
+    if (!this.enabled) {
+      if (!this.requireUpload) return;
+      this.log("Для обязательной загрузки укажите TESTBALL_URL, TESTBALL_TOKEN и TESTBALL_PROJECT");
+      return { status: "failed" };
+    }
     // тесты, до которых не дошло дело (прервали запуск, сработал maxFailures), — «не выполнялся»
     for (const test of this.root?.allTests() || []) {
       if (this.reported.has(test.id)) continue;
@@ -260,10 +270,15 @@ class TestballReporter {
     await this.flush();
     await this.enqueue(async () => {
       if (!this.run) return;
+      if (this.requireUpload && this.deliveryFailed) {
+        await this.call("PATCH", `/autoruns/${this.run.num}`, { state: "failed", failureReason: "Репортёр не смог передать все результаты или вложения" });
+        return;
+      }
       await this.call("PATCH", `/autoruns/${this.run.num}`, { state: "finished" });
       const s = this.stats;
       this.log(`${this.run.id} готов: пройдено ${s.passed}, упало ${s.failed}, сломано ${s.broken}, пропущено ${s.skipped}, файлов ${s.files}`);
     });
+    if (this.requireUpload && (this.deliveryFailed || !this.run)) return { status: "failed" };
   }
 }
 
